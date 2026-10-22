@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
+  <title>Docker Janitor</title>
+  <!-- spout -->
+  <path d="M9.6 2.2c1.2 1.4 1.9 2.6 1.9 3.6a1.9 1.9 0 0 1-3.8 0c0-1 .7-2.2 1.9-3.6z" fill="#2496ED"/>
+  <!-- body: capsule head on the left -->
+  <path d="M5 8.6h9.4c1.6 0 2.9 1 3.5 2.4l.4 1-.4 1c-.6 1.4-1.9 2.4-3.5 2.4H5a3.4 3.4 0 0 1-3.4-3.4A3.4 3.4 0 0 1 5 8.6z" fill="#2496ED"/>
+  <!-- tail fin -->
+  <path d="M16.4 8.6l4.8-2.9v12.6l-4.8-2.9z" fill="#2496ED"/>
+  <!-- eye -->
+  <circle cx="5.2" cy="11.9" r="1.1" fill="#ffffff"/>
+</svg>

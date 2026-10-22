@@ -55,9 +55,11 @@ Steps:
 **Files:** create `icons/docker-janitor.svg`
 
 Steps:
-- [ ] Draw a bold silhouette (no strokes under 2 units, no text).
-- [ ] Render at 16/22/48 px.
-- [ ] Check light and dark backgrounds.
+- [x] Draw a bold silhouette (no strokes under 2 units, no text).
+- [x] Render at 16/22/48 px.
+- [x] Check light and dark backgrounds.
+
+**Done:** `icons/docker-janitor.svg` — docker-blue whale (capsule body, tail fin, spout, white eye), no strokes, no text. Rasterized at 16/22/48 px via librsvg and composited on `#2b2b2b` and `#f5f5f5`; confirmed legible at 22 px, and confirmed in the live panel screenshot on the dark top bar. No unit test applies to an asset; verification is the rendered output.
 
 ### Task 3 — Config loader
 
