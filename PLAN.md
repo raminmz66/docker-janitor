@@ -84,11 +84,17 @@ Steps:
 Input is captured CLI text, never live Docker.
 
 Steps:
-- [ ] Save real output as fixtures (`docker system df`, `docker images --format '{{json .}}'`, `docker buildx du --verbose`).
-- [ ] Write failing tests reproducing measured numbers: images ≈ 23.6 GB reclaimable, cache ≈ 20.8 GB, volumes and 2 exited containers reported as not removable.
-- [ ] Run tests; confirm failure.
-- [ ] Implement the three functions.
-- [ ] Run tests; confirm pass.
+- [x] Save real output as fixtures (`docker system df`, `docker images --format '{{json .}}'`, `docker buildx du --verbose`).
+- [x] Write failing tests reproducing measured numbers: images ≈ 23.6 GB reclaimable, cache ≈ 20.8 GB, volumes and 2 exited containers reported as not removable.
+- [x] Run tests; confirm failure.
+- [x] Implement the three functions.
+- [x] Run tests; confirm pass.
+
+**Done:** `parse_size`, `parse_timestamp`, `parse_system_df`, `parse_images`, `parse_used_ids`, `parse_unique_sizes`, `parse_cache_records`, `unused_images`, `dangling_images`, `prunable_cache`, `Preview`, `human_bytes`, `summarize`; 12 tests in `tests/test_inspect.py` over real captures in `tests/fixtures/` (8.7k-line `buildx du --verbose` capture included).
+
+**Two findings from the real data, pinned in tests:**
+- Cache rule "reclaimable and not shared" reproduces Docker's own figure exactly: 20.83 GB / 180 entries.
+- At the 30-day threshold only 19 unused images qualify (3.56 GB), not the 23.6 GB Docker calls reclaimable — that number counts *all* unused images regardless of age. Most of this machine's images are 10 days to 2 weeks old. With `IMAGE_MIN_AGE_DAYS=0` the preview would show the full 23.6 GB. Live cross-check: janitor 24.4 GB total vs Docker 23.6 GB images + 20.8 GB cache.
 
 ### Task 5 — Preview dialog
 
