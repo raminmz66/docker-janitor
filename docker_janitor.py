@@ -8,6 +8,7 @@ reclaimed, and press Continue to actually delete anything.
 import fcntl
 import os
 import sys
+from dataclasses import dataclass
 
 import gi
 
@@ -22,6 +23,58 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ICON_DIR = os.path.join(HERE, "icons")
 ICON_NAME = "docker-janitor"
 ICON_FALLBACK = "edit-clear"
+
+DEFAULT_IMAGE_MIN_AGE_DAYS = 30
+DEFAULT_CACHE_MIN_AGE_HOURS = 168
+CONFIG_PATH = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"),
+    APP_ID,
+    "config.env",
+)
+
+
+@dataclass(frozen=True)
+class Config:
+    """Age thresholds; anything younger than this is left alone."""
+
+    image_min_age_days: int = DEFAULT_IMAGE_MIN_AGE_DAYS
+    cache_min_age_hours: int = DEFAULT_CACHE_MIN_AGE_HOURS
+
+
+def _positive_int(raw, default):
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return value if value >= 0 else default
+
+
+def load_config(path):
+    """Read key=value pairs; anything missing or malformed keeps its default."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return Config()
+
+    values = {}
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key.strip()] = value.strip()
+
+    defaults = Config()
+    return Config(
+        image_min_age_days=_positive_int(
+            values.get("IMAGE_MIN_AGE_DAYS"), defaults.image_min_age_days
+        ),
+        cache_min_age_hours=_positive_int(
+            values.get("CACHE_MIN_AGE_HOURS"), defaults.cache_min_age_hours
+        ),
+    )
 
 
 def lock_path():

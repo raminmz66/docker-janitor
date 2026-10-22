@@ -68,10 +68,12 @@ Steps:
 **Produces:** `load_config(path: str) -> Config` where `Config` has `image_min_age_days: int`, `cache_min_age_hours: int`.
 
 Steps:
-- [ ] Write failing tests: missing file → defaults; override; malformed value → default kept.
-- [ ] Run tests; confirm failure.
-- [ ] Implement `load_config`.
-- [ ] Run tests; confirm pass.
+- [x] Write failing tests: missing file → defaults; override; malformed value → default kept.
+- [x] Run tests; confirm failure.
+- [x] Implement `load_config`.
+- [x] Run tests; confirm pass.
+
+**Done:** `Config` dataclass + `load_config()` in `docker_janitor.py`; `CONFIG_PATH` resolves to `~/.config/docker-janitor/config.env`. Five tests in `tests/test_config.py`. Comments, blank lines, unknown keys, and malformed values are tolerated; negative values fall back to the default. Real config file created with the two documented keys.
 
 ### Task 4 — Inspection core
 
