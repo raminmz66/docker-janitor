@@ -43,10 +43,12 @@
 **Produces:** `main() -> int`, `class JanitorApp` with `build_indicator()` and `quit_app()`.
 
 Steps:
-- [ ] Write indicator + lock file + menu (`Run` insensitive, `Exit` active).
-- [ ] Launch under `DISPLAY=:1`; confirm icon appears and `Exit` returns 0.
-- [ ] Launch twice; confirm the second instance exits silently.
-- [ ] Screenshot the panel; confirm the icon renders.
+- [x] Write indicator + lock file + menu (`Run` insensitive, `Exit` active).
+- [x] Launch under `DISPLAY=:1`; confirm icon appears and `Exit` returns 0.
+- [x] Launch twice; confirm the second instance exits silently.
+- [x] Screenshot the panel; confirm the icon renders.
+
+**Done:** `acquire_lock()`, `build_menu()`, `JanitorApp`, `main()` in `docker_janitor.py`; tests in `tests/test_lock.py` (3 passing). Live run showed the icon in the top bar (fallback `edit-clear` until Task 2); second instance exited 0 without a second icon; pressing `Exit` ended the loop with code 0.
 
 ### Task 2 — Icon
 
