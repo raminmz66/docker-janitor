@@ -37,11 +37,11 @@
 - Produces: `calculate_storage_proportions(cache_bytes: int, image_bytes: int, kept_bytes: int) -> dict[str, float]`, `build_segmented_bar(cache_bytes: int, image_bytes: int, kept_bytes: int) -> Gtk.Box`
 - Consumes: `Preview` dataclass, `human_bytes()`
 
-- [ ] **Step 1: Write failing tests for storage proportions and segmented bar creation**
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Implement proportion calculations and CSS-styled `Gtk.Box` in `docker_janitor.py`**
-- [ ] **Step 4: Run test to verify it passes**
-- [ ] **Step 5: Commit `feat(hud): add segmented storage bar calculation and styling`**
+- [x] **Step 1: Write failing tests for storage proportions and segmented bar creation**
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Implement proportion calculations and CSS-styled `Gtk.Box` in `docker_janitor.py`**
+- [x] **Step 4: Run test to verify it passes**
+- [x] **Step 5: Commit `feat(hud): add segmented storage bar calculation and styling`**
 
 ---
 
@@ -55,11 +55,11 @@
 - Produces: `class JanitorHudWindow(Gtk.Window)` with `position_near_tray()`, `on_key_press()`, `on_focus_out()`, and signal callbacks for clean and exit actions.
 - Consumes: `Preview`, `build_segmented_bar()`
 
-- [ ] **Step 1: Write failing tests for window initialization, Escape key, and focus-out**
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Implement `JanitorHudWindow` in `docker_janitor.py`**
-- [ ] **Step 4: Run test to verify it passes**
-- [ ] **Step 5: Commit `feat(hud): implement JanitorHudWindow with panel positioning and dismissal`**
+- [x] **Step 1: Write failing tests for window initialization, Escape key, and focus-out**
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Implement `JanitorHudWindow` in `docker_janitor.py`**
+- [x] **Step 4: Run test to verify it passes**
+- [x] **Step 5: Commit `feat(hud): implement JanitorHudWindow with panel positioning and dismissal`**
 
 ---
 
@@ -74,11 +74,11 @@
 - Produces: `JanitorApp.show_hud()`, updated `JanitorApp.on_run()` activating the HUD directly instead of Zenity.
 - Consumes: `JanitorHudWindow`, `run_prune()`, `log_report()`, `notify_report()`
 
-- [ ] **Step 1: Write failing tests asserting HUD opens on run and clean button triggers prune**
-- [ ] **Step 2: Run test to verify it fails**
-- [ ] **Step 3: Wire HUD into `JanitorApp` and connect the clean button to the worker thread**
-- [ ] **Step 4: Run test to verify it passes**
-- [ ] **Step 5: Commit `feat(hud): connect tray action directly to HUD with live cleanup feedback`**
+- [x] **Step 1: Write failing tests asserting HUD opens on run and clean button triggers prune**
+- [x] **Step 2: Run test to verify it fails**
+- [x] **Step 3: Wire HUD into `JanitorApp` and connect the clean button to the worker thread**
+- [x] **Step 4: Run test to verify it passes**
+- [x] **Step 5: Commit `feat(hud): connect tray action directly to HUD with live cleanup feedback`**
 
 ---
 
@@ -88,8 +88,8 @@
 - Modify: `README.md`
 - Modify: `PLAN.md`
 
-- [ ] **Step 1: Update documentation and plan to reflect the native HUD**
-- [ ] **Step 2: Run full test suite with broadway across all test files**
-- [ ] **Step 3: Restart user desktop service `systemctl --user restart docker-janitor.service`**
-- [ ] **Step 4: Verify live service status**
-- [ ] **Step 5: Commit `docs: update documentation for native Popover HUD`**
+- [x] **Step 1: Update documentation and plan to reflect the native HUD**
+- [x] **Step 2: Run full test suite with broadway across all test files**
+- [x] **Step 3: Restart user desktop service `systemctl --user restart docker-janitor.service`**
+- [x] **Step 4: Verify live service status**
+- [x] **Step 5: Commit `docs: update documentation for native Popover HUD`**

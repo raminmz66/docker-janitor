@@ -7,9 +7,10 @@ A lightweight desktop system tray indicator for Linux that previews Docker disk 
 ## Highlights
 
 - **Safety First**: Never touches or prunes volumes or containers (active or stopped). Only unreferenced images and build cache entries older than configured age thresholds are ever prunable.
-- **Preview Before Deleting**: Clicking **Run** calculates an exact preview of reclaimable space and presents a confirmation dialog. Closing or clicking **Skip** aborts without touching Docker.
+- **Native Popover HUD**: Clicking the tray icon opens a modern, frameless GTK popover directly beneath the top panel showing reclaimable storage, a segmented color breakdown bar, and a single-click cleanup action.
+- **Auto-Dismissal**: Pressing `Escape` or clicking anywhere outside the HUD card dismisses it immediately with zero Docker mutation.
 - **Single Instance**: Enforced via file lock (`$XDG_RUNTIME_DIR/docker-janitor.lock`). Launching again exits cleanly without duplicate tray icons.
-- **No Background Daemon or Sudo**: Runs strictly as the current user, using your existing Docker CLI permissions and standard system desktop tools (`zenity`, `notify-send`, PyGObject).
+- **No Background Daemon or Sudo**: Runs strictly as the current user, using your existing Docker CLI permissions and standard desktop tools (PyGObject, GTK 3, `notify-send`).
 
 ## Configuration
 
