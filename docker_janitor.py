@@ -9,6 +9,7 @@ import fcntl
 import json
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -421,6 +422,101 @@ def summarize(preview):
         lines.append("")
         lines.append("Some sizes are estimates; Docker reports them as shared layers.")
     return "\n".join(lines)
+
+
+class DockerError(RuntimeError):
+    """Docker refused a command or is not reachable."""
+
+
+def run_docker(*args):
+    """Run a docker subcommand and return stdout, or raise DockerError."""
+    try:
+        done = subprocess.run(
+            ("docker",) + args, capture_output=True, text=True, timeout=180
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise DockerError(str(exc))
+    if done.returncode != 0:
+        raise DockerError((done.stderr or "").strip() or "docker %s failed" % (args[0],))
+    return done.stdout
+
+
+def collect_preview(config, runner=run_docker, now=None):
+    """Read-only snapshot of what a prune would free. Deletes nothing."""
+    runner("info")
+
+    df = parse_system_df(runner("system df"))
+    images = parse_images(runner("images", "--format", "{{json .}}"))
+    container_ids = [line.strip() for line in runner("ps", "-aq").split() if line.strip()]
+    used = set()
+    if container_ids:
+        used = parse_used_ids(
+            runner("container", "inspect", "--format", "{{.Image}}", *container_ids)
+        )
+    unique = parse_unique_sizes(runner("system df", "-v"))
+    if now is None:
+        now = datetime.now().astimezone()
+
+    old_images = unused_images(images, used, now, config.image_min_age_days)
+    dangling = dangling_images(images)
+
+    estimated = False
+    try:
+        records = parse_cache_records(runner("buildx", "du", "--verbose"))
+        prunable = prunable_cache(records, now, config.cache_min_age_hours)
+        cache_bytes, cache_count = sum(r.size for r in prunable), len(prunable)
+    except DockerError:
+        # Older Docker without buildx: fall back to the summary figure.
+        cache_bytes = df.get("cache", {}).get("reclaimable", 0)
+        cache_count = 0
+        estimated = True
+
+    return Preview(
+        cache_bytes=cache_bytes,
+        cache_records=cache_count,
+        image_bytes=sum(unique.get(image.id, 0) for image in old_images),
+        image_count=len(old_images),
+        dangling_bytes=sum(unique.get(image.id, 0) for image in dangling),
+        dangling_count=len(dangling),
+        kept_volumes_bytes=df.get("volumes", {}).get("size", 0),
+        kept_volumes_count=df.get("volumes", {}).get("total", 0),
+        kept_containers_bytes=df.get("containers", {}).get("size", 0),
+        kept_containers_count=df.get("containers", {}).get("total", 0),
+        image_min_age_days=config.image_min_age_days,
+        cache_min_age_hours=config.cache_min_age_hours,
+        estimated=estimated,
+    )
+
+
+def show_toast(title, message, runner=None):
+    """Post a desktop notification using notify-send."""
+    if runner is None:
+        runner = subprocess.run
+    try:
+        runner(["notify-send", "-a", APP_ID, title, message])
+    except OSError:
+        pass
+
+
+def _run_zenity(argv):
+    try:
+        return subprocess.run(argv).returncode
+    except OSError:
+        return 1
+
+
+def ask_continue(preview, runner=_run_zenity):
+    """True only when the user pressed Continue. Closing the dialog is a Skip."""
+    argv = [
+        "zenity",
+        "--question",
+        "--title=Docker Janitor",
+        "--ok-label=Continue",
+        "--cancel-label=Skip",
+        "--width=460",
+        "--text=" + summarize(preview),
+    ]
+    return runner(argv) == 0
 
 
 class JanitorApp:

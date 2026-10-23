@@ -103,10 +103,12 @@ Steps:
 **Produces:** `collect_preview(config) -> Preview`, `ask_continue(preview) -> bool`.
 
 Steps:
-- [ ] Read state read-only (the four commands above).
-- [ ] Show zenity `--question` with `Skip`/`Continue` and the breakdown.
-- [ ] Verify `Skip` closes with zero Docker mutation.
-- [ ] Verify daemon-down shows a toast instead of a dialog.
+- [x] Read state read-only (the four commands above).
+- [x] Show zenity `--question` with `Skip`/`Continue` and the breakdown.
+- [x] Verify `Skip` closes with zero Docker mutation.
+- [x] Verify daemon-down shows a toast instead of a dialog.
+
+**Done:** `collect_preview()`, `ask_continue()`, and `show_toast()` in `docker_janitor.py`; tests in `tests/test_preview.py` (10 passing). Zenity exit code 0 triggers prune; any other return or dialog close skips. Docker daemon errors raise `DockerError` and route to desktop notifications.
 
 ### Task 6 — Prune and report
 
