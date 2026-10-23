@@ -22,7 +22,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("AyatanaAppIndicator3", "0.1")
 
 from gi.repository import AyatanaAppIndicator3 as AppIndicator  # noqa: E402
-from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk  # noqa: E402
 
 APP_ID = "docker-janitor"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -203,60 +203,119 @@ def calculate_storage_proportions(cache_bytes, image_bytes, kept_bytes):
 
 
 HUD_CSS = """
-.janitor-hud {
+window.janitor-hud {
+    background-color: transparent;
+}
+.janitor-card {
     background-color: @theme_base_color;
     color: @theme_text_color;
-    border: 1px solid alpha(@theme_text_color, 0.2);
-    border-radius: 12px;
+    border: 1px solid alpha(@theme_text_color, 0.18);
+    border-radius: 14px;
+    padding: 16px 18px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
 }
 .janitor-hero-number {
-    font-size: 26px;
-    font-weight: 700;
+    font-size: 32px;
+    font-weight: 800;
     color: #0db7ed;
 }
 .janitor-segmented-bar {
-    border-radius: 5px;
-    background-color: alpha(@theme_text_color, 0.1);
+    border-radius: 6px;
+    background-color: alpha(@theme_text_color, 0.08);
     min-height: 10px;
 }
 .bar-segment-cache {
     background-color: #0db7ed;
+    background-image: none;
 }
 .bar-segment-images {
     background-color: #ff9f0a;
+    background-image: none;
 }
 .bar-segment-kept {
     background-color: alpha(@theme_text_color, 0.25);
+    background-image: none;
+}
+.bar-segment-first {
+    border-top-left-radius: 5px;
+    border-bottom-left-radius: 5px;
+}
+.bar-segment-last {
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
 }
 .bar-legend-cache {
     color: #0db7ed;
     font-size: 11px;
+    font-weight: 600;
 }
 .bar-legend-images {
     color: #ff9f0a;
     font-size: 11px;
+    font-weight: 600;
 }
 .janitor-title {
     font-weight: 700;
     font-size: 13px;
 }
 .dim-label {
-    opacity: 0.7;
-    font-size: 12px;
+    opacity: 0.65;
+    font-size: 11.5px;
 }
 .janitor-badge {
-    background-color: rgba(52, 199, 89, 0.15);
-    border-radius: 6px;
-    padding: 6px 10px;
-    color: #2e7d32;
-    font-size: 11px;
+    background-color: rgba(52, 199, 89, 0.12);
+    border: 1px solid rgba(52, 199, 89, 0.3);
+    border-radius: 8px;
+    padding: 7px 11px;
 }
-.janitor-btn-primary {
-    background-color: #0db7ed;
-    color: white;
-    font-weight: 600;
+.janitor-badge label {
+    color: @theme_text_color;
+    font-size: 11px;
+    font-weight: 500;
+}
+button.janitor-close-btn {
+    border: none;
+    background: transparent;
+    background-image: none;
+    box-shadow: none;
+    color: alpha(@theme_text_color, 0.45);
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 2px 6px;
+    font-size: 13px;
+    font-weight: 700;
+}
+button.janitor-close-btn:hover {
+    background-color: alpha(@theme_text_color, 0.08);
+    color: @theme_text_color;
+}
+button.janitor-btn-primary {
+    background-color: #0db7ed;
+    background-image: none;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    box-shadow: 0 2px 8px rgba(13, 183, 237, 0.4);
+}
+button.janitor-btn-primary:hover {
+    background-color: #09a5d7;
+    background-image: none;
+}
+button.janitor-btn-primary:active {
+    background-color: #088db8;
+    background-image: none;
+}
+button.janitor-btn-primary:disabled {
+    background-color: alpha(@theme_text_color, 0.12);
+    background-image: none;
+    box-shadow: none;
+}
+button.janitor-btn-primary label {
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 13px;
+}
+button.janitor-btn-primary:disabled label {
+    color: alpha(@theme_text_color, 0.4);
 }
 """
 
@@ -285,13 +344,19 @@ def build_segmented_bar(cache_bytes, image_bytes, kept_bytes):
 
     props = calculate_storage_proportions(cache_bytes, image_bytes, kept_bytes)
 
-    for key, class_name in (
+    segments = [
         ("cache", "bar-segment-cache"),
         ("images", "bar-segment-images"),
         ("kept", "bar-segment-kept"),
-    ):
+    ]
+    for idx, (key, class_name) in enumerate(segments):
         seg = Gtk.Box()
-        seg.get_style_context().add_class(class_name)
+        seg_ctx = seg.get_style_context()
+        seg_ctx.add_class(class_name)
+        if idx == 0:
+            seg_ctx.add_class("bar-segment-first")
+        if idx == len(segments) - 1:
+            seg_ctx.add_class("bar-segment-last")
         box.pack_start(seg, True, True, 0)
         seg.set_size_request(max(4, int(300 * props[key])), 10)
 
@@ -313,6 +378,13 @@ class JanitorHudWindow(Gtk.Window):
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
         self.set_resizable(False)
+
+        screen = self.get_screen()
+        if screen:
+            visual = screen.get_rgba_visual()
+            if visual and screen.is_composited():
+                self.set_visual(visual)
+        self.set_app_paintable(True)
         self.get_style_context().add_class("janitor-hud")
 
         self.connect("key-press-event", self._on_key_press)
@@ -321,16 +393,24 @@ class JanitorHudWindow(Gtk.Window):
         self._build_ui()
 
     def _build_ui(self):
-        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        root.set_margin_top(14)
-        root.set_margin_bottom(14)
-        root.set_margin_start(16)
-        root.set_margin_end(16)
-        self.add(root)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        card.get_style_context().add_class("janitor-card")
+        self.add(card)
 
+        # Header
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        icon_img = Gtk.Image.new_from_icon_name("docker-janitor", Gtk.IconSize.MENU)
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+
+        icon_path = os.path.join(ICON_DIR, ICON_NAME + ".svg")
+        if os.path.exists(icon_path):
+            try:
+                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(icon_path, 20, 20, True)
+                icon_img = Gtk.Image.new_from_pixbuf(pixbuf)
+            except Exception:
+                icon_img = Gtk.Image.new_from_icon_name("edit-clear", Gtk.IconSize.MENU)
+        else:
+            icon_img = Gtk.Image.new_from_icon_name("edit-clear", Gtk.IconSize.MENU)
+
         title_box.pack_start(icon_img, False, False, 0)
         title_lbl = Gtk.Label(label="Docker Janitor")
         title_lbl.get_style_context().add_class("janitor-title")
@@ -338,26 +418,30 @@ class JanitorHudWindow(Gtk.Window):
         header.pack_start(title_box, False, False, 0)
 
         close_btn = Gtk.Button(label="✕")
+        close_btn.get_style_context().add_class("janitor-close-btn")
         close_btn.set_relief(Gtk.ReliefStyle.NONE)
         close_btn.connect("clicked", lambda *_: self.on_escape_pressed())
         header.pack_end(close_btn, False, False, 0)
-        root.pack_start(header, False, False, 0)
+        card.pack_start(header, False, False, 0)
 
-        hero_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        # Hero Stat
+        hero_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         self._hero_label = Gtk.Label(label=human_bytes(self.preview.total_bytes))
         self._hero_label.get_style_context().add_class("janitor-hero-number")
         hero_sub = Gtk.Label(label="Reclaimable without affecting active projects")
         hero_sub.get_style_context().add_class("dim-label")
         hero_box.pack_start(self._hero_label, False, False, 0)
         hero_box.pack_start(hero_sub, False, False, 0)
-        root.pack_start(hero_box, False, False, 0)
+        card.pack_start(hero_box, False, False, 0)
 
+        # Segmented Storage Bar
         kept_bytes = self.preview.kept_volumes_bytes + self.preview.kept_containers_bytes
         bar = build_segmented_bar(
             self.preview.cache_bytes, self.preview.image_bytes, kept_bytes
         )
-        root.pack_start(bar, False, False, 0)
+        card.pack_start(bar, False, False, 0)
 
+        # Legend
         legend = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
         cache_lbl = Gtk.Label(label="● Cache: %s" % human_bytes(self.preview.cache_bytes))
         cache_lbl.get_style_context().add_class("bar-legend-cache")
@@ -365,8 +449,9 @@ class JanitorHudWindow(Gtk.Window):
         images_lbl.get_style_context().add_class("bar-legend-images")
         legend.pack_start(cache_lbl, False, False, 0)
         legend.pack_start(images_lbl, False, False, 0)
-        root.pack_start(legend, False, False, 0)
+        card.pack_start(legend, False, False, 0)
 
+        # Safety badge
         badge = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         badge.get_style_context().add_class("janitor-badge")
         badge_text = "🛡️ Protected: %d volumes (%s) & %d containers safe" % (
@@ -376,8 +461,9 @@ class JanitorHudWindow(Gtk.Window):
         )
         badge_lbl = Gtk.Label(label=badge_text)
         badge.pack_start(badge_lbl, False, False, 0)
-        root.pack_start(badge, False, False, 0)
+        card.pack_start(badge, False, False, 0)
 
+        # Primary Action Button
         actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         if self.preview.empty:
             btn_label = "No Cleanup Needed"
@@ -391,7 +477,7 @@ class JanitorHudWindow(Gtk.Window):
         self._clean_button.set_sensitive(sensitive)
         self._clean_button.connect("clicked", self._on_clean_clicked)
         actions.pack_end(self._clean_button, True, True, 0)
-        root.pack_start(actions, False, False, 0)
+        card.pack_start(actions, False, False, 0)
 
     def position_near_tray(self):
         display = Gdk.Display.get_default()
