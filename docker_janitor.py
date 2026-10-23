@@ -22,7 +22,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("AyatanaAppIndicator3", "0.1")
 
 from gi.repository import AyatanaAppIndicator3 as AppIndicator  # noqa: E402
-from gi.repository import GLib, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 APP_ID = "docker-janitor"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -179,6 +179,107 @@ def human_bytes(value):
         if value >= factor:
             return "%.1f %s" % (value / factor, unit)
     return "%d B" % value
+
+
+def calculate_storage_proportions(cache_bytes, image_bytes, kept_bytes):
+    """Return fractions of total storage with a floor so non-zero slices remain visible."""
+    total = cache_bytes + image_bytes + kept_bytes
+    if total <= 0:
+        return {"cache": 0.0, "images": 0.0, "kept": 1.0}
+
+    raw = {
+        "cache": cache_bytes / total,
+        "images": image_bytes / total,
+        "kept": kept_bytes / total,
+    }
+    min_floor = 0.02
+    has_min = {k: max(v, min_floor) if v > 0 else 0.0 for k, v in raw.items()}
+    diff = sum(has_min.values()) - 1.0
+    if diff > 0:
+        largest_key = max(has_min.keys(), key=lambda k: raw[k])
+        has_min[largest_key] = max(min_floor, has_min[largest_key] - diff)
+
+    return has_min
+
+
+HUD_CSS = """
+.janitor-hud {
+    background-color: @theme_base_color;
+    color: @theme_text_color;
+    border: 1px solid alpha(@theme_text_color, 0.2);
+    border-radius: 12px;
+}
+.janitor-hero-number {
+    font-size: 26px;
+    font-weight: 700;
+    color: #0db7ed;
+}
+.janitor-segmented-bar {
+    border-radius: 5px;
+    background-color: alpha(@theme_text_color, 0.1);
+    min-height: 10px;
+}
+.bar-segment-cache {
+    background-color: #0db7ed;
+}
+.bar-segment-images {
+    background-color: #ff9f0a;
+}
+.bar-segment-kept {
+    background-color: alpha(@theme_text_color, 0.25);
+}
+.janitor-badge {
+    background-color: rgba(52, 199, 89, 0.15);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #2e7d32;
+    font-size: 11px;
+}
+.janitor-btn-primary {
+    background-color: #0db7ed;
+    color: white;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 8px 16px;
+}
+"""
+
+_CSS_LOADED = False
+
+
+def ensure_hud_css():
+    global _CSS_LOADED
+    if _CSS_LOADED:
+        return
+    provider = Gtk.CssProvider()
+    provider.load_from_data(HUD_CSS.encode("utf-8"))
+    screen = Gdk.Screen.get_default()
+    if screen:
+        Gtk.StyleContext.add_provider_for_screen(
+            screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+    _CSS_LOADED = True
+
+
+def build_segmented_bar(cache_bytes, image_bytes, kept_bytes):
+    ensure_hud_css()
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+    box.get_style_context().add_class("janitor-segmented-bar")
+    box.set_size_request(300, 10)
+
+    props = calculate_storage_proportions(cache_bytes, image_bytes, kept_bytes)
+
+    for key, class_name in (
+        ("cache", "bar-segment-cache"),
+        ("images", "bar-segment-images"),
+        ("kept", "bar-segment-kept"),
+    ):
+        seg = Gtk.Box()
+        seg.get_style_context().add_class(class_name)
+        box.pack_start(seg, True, True, 0)
+        seg.set_size_request(max(4, int(300 * props[key])), 10)
+
+    return box
 
 
 def parse_system_df(text):
