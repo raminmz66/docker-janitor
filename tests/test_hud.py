@@ -52,5 +52,41 @@ class SegmentedBarWidgetTests(unittest.TestCase):
         self.assertEqual(len(children), 3)
 
 
+class HudWindowTests(unittest.TestCase):
+    def setUp(self):
+        self.preview = dj.Preview(
+            cache_bytes=20832596679,
+            cache_records=180,
+            image_bytes=3558350010,
+            image_count=19,
+            kept_volumes_bytes=156200000,
+            kept_volumes_count=6,
+            kept_containers_bytes=98300,
+            kept_containers_count=12,
+        )
+
+    def test_hud_window_displays_hero_number_and_button(self):
+        win = dj.JanitorHudWindow(self.preview)
+        self.assertEqual(win._hero_label.get_text(), "24.4 GB")
+        self.assertIn("Free 24.4 GB Now", win._clean_button.get_label())
+        self.assertTrue(win._clean_button.get_sensitive())
+        win.destroy()
+
+    def test_hud_window_empty_preview_disables_button(self):
+        empty_preview = dj.Preview()
+        win = dj.JanitorHudWindow(empty_preview)
+        self.assertEqual(win._hero_label.get_text(), "0 B")
+        self.assertFalse(win._clean_button.get_sensitive())
+        self.assertEqual(win._clean_button.get_label(), "No Cleanup Needed")
+        win.destroy()
+
+    def test_escape_key_closes_window(self):
+        closed = []
+        win = dj.JanitorHudWindow(self.preview, on_close=lambda: closed.append(True))
+        win.on_escape_pressed()
+        self.assertEqual(len(closed), 1)
+        win.destroy()
+
+
 if __name__ == "__main__":
     unittest.main()

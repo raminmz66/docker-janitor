@@ -228,6 +228,22 @@ HUD_CSS = """
 .bar-segment-kept {
     background-color: alpha(@theme_text_color, 0.25);
 }
+.bar-legend-cache {
+    color: #0db7ed;
+    font-size: 11px;
+}
+.bar-legend-images {
+    color: #ff9f0a;
+    font-size: 11px;
+}
+.janitor-title {
+    font-weight: 700;
+    font-size: 13px;
+}
+.dim-label {
+    opacity: 0.7;
+    font-size: 12px;
+}
 .janitor-badge {
     background-color: rgba(52, 199, 89, 0.15);
     border-radius: 6px;
@@ -280,6 +296,140 @@ def build_segmented_bar(cache_bytes, image_bytes, kept_bytes):
         seg.set_size_request(max(4, int(300 * props[key])), 10)
 
     return box
+
+
+class JanitorHudWindow(Gtk.Window):
+    def __init__(self, preview, on_clean=None, on_close=None, on_exit_app=None):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        ensure_hud_css()
+
+        self.preview = preview
+        self.on_clean_callback = on_clean
+        self.on_close_callback = on_close
+        self.on_exit_app_callback = on_exit_app
+
+        self.set_decorated(False)
+        self.set_type_hint(Gdk.WindowTypeHint.POPUP_MENU)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
+        self.set_resizable(False)
+        self.get_style_context().add_class("janitor-hud")
+
+        self.connect("key-press-event", self._on_key_press)
+        self.connect("focus-out-event", self._on_focus_out)
+
+        self._build_ui()
+
+    def _build_ui(self):
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        root.set_margin_top(14)
+        root.set_margin_bottom(14)
+        root.set_margin_start(16)
+        root.set_margin_end(16)
+        self.add(root)
+
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        icon_img = Gtk.Image.new_from_icon_name("docker-janitor", Gtk.IconSize.MENU)
+        title_box.pack_start(icon_img, False, False, 0)
+        title_lbl = Gtk.Label(label="Docker Janitor")
+        title_lbl.get_style_context().add_class("janitor-title")
+        title_box.pack_start(title_lbl, False, False, 0)
+        header.pack_start(title_box, False, False, 0)
+
+        close_btn = Gtk.Button(label="✕")
+        close_btn.set_relief(Gtk.ReliefStyle.NONE)
+        close_btn.connect("clicked", lambda *_: self.on_escape_pressed())
+        header.pack_end(close_btn, False, False, 0)
+        root.pack_start(header, False, False, 0)
+
+        hero_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        self._hero_label = Gtk.Label(label=human_bytes(self.preview.total_bytes))
+        self._hero_label.get_style_context().add_class("janitor-hero-number")
+        hero_sub = Gtk.Label(label="Reclaimable without affecting active projects")
+        hero_sub.get_style_context().add_class("dim-label")
+        hero_box.pack_start(self._hero_label, False, False, 0)
+        hero_box.pack_start(hero_sub, False, False, 0)
+        root.pack_start(hero_box, False, False, 0)
+
+        kept_bytes = self.preview.kept_volumes_bytes + self.preview.kept_containers_bytes
+        bar = build_segmented_bar(
+            self.preview.cache_bytes, self.preview.image_bytes, kept_bytes
+        )
+        root.pack_start(bar, False, False, 0)
+
+        legend = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        cache_lbl = Gtk.Label(label="● Cache: %s" % human_bytes(self.preview.cache_bytes))
+        cache_lbl.get_style_context().add_class("bar-legend-cache")
+        images_lbl = Gtk.Label(label="● Images: %s" % human_bytes(self.preview.image_bytes))
+        images_lbl.get_style_context().add_class("bar-legend-images")
+        legend.pack_start(cache_lbl, False, False, 0)
+        legend.pack_start(images_lbl, False, False, 0)
+        root.pack_start(legend, False, False, 0)
+
+        badge = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        badge.get_style_context().add_class("janitor-badge")
+        badge_text = "🛡️ Protected: %d volumes (%s) & %d containers safe" % (
+            self.preview.kept_volumes_count,
+            human_bytes(self.preview.kept_volumes_bytes),
+            self.preview.kept_containers_count,
+        )
+        badge_lbl = Gtk.Label(label=badge_text)
+        badge.pack_start(badge_lbl, False, False, 0)
+        root.pack_start(badge, False, False, 0)
+
+        actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        if self.preview.empty:
+            btn_label = "No Cleanup Needed"
+            sensitive = False
+        else:
+            btn_label = "Free %s Now" % human_bytes(self.preview.total_bytes)
+            sensitive = True
+
+        self._clean_button = Gtk.Button(label=btn_label)
+        self._clean_button.get_style_context().add_class("janitor-btn-primary")
+        self._clean_button.set_sensitive(sensitive)
+        self._clean_button.connect("clicked", self._on_clean_clicked)
+        actions.pack_end(self._clean_button, True, True, 0)
+        root.pack_start(actions, False, False, 0)
+
+    def position_near_tray(self):
+        display = Gdk.Display.get_default()
+        if not display:
+            return
+        monitor = display.get_primary_monitor() or (
+            display.get_n_monitors() > 0 and display.get_monitor(0)
+        )
+        if not monitor:
+            return
+        workarea = monitor.get_workarea()
+        self.show_all()
+        alloc = self.get_allocation()
+        win_w = max(alloc.width, 340)
+        x = workarea.x + workarea.width - win_w - 16
+        y = workarea.y + 36
+        self.move(max(0, x), max(0, y))
+
+    def on_escape_pressed(self):
+        if self.on_close_callback:
+            self.on_close_callback()
+        self.destroy()
+
+    def _on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_Escape:
+            self.on_escape_pressed()
+            return True
+        return False
+
+    def _on_focus_out(self, widget, event):
+        self.on_escape_pressed()
+        return False
+
+    def _on_clean_clicked(self, button):
+        button.set_sensitive(False)
+        button.set_label("Cleaning up...")
+        if self.on_clean_callback:
+            self.on_clean_callback()
 
 
 def parse_system_df(text):
