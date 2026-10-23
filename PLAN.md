@@ -117,10 +117,12 @@ Steps:
 **Produces:** `prune_commands(config) -> list[list[str]]`, `run_prune(cmds, runner) -> Report`.
 
 Steps:
-- [ ] Write failing test asserting exact argv: `builder prune -af --filter until=168h`, `image prune -f`, `image prune -af --filter until=720h`, and that no `volume`/`container` prune appears.
-- [ ] Implement command construction behind an injectable runner.
-- [ ] Verify before/after `df` delta → toast → log append.
-- [ ] Run tests; confirm pass. Do not execute real prunes.
+- [x] Write failing test asserting exact argv: `builder prune -af --filter until=168h`, `image prune -f`, `image prune -af --filter until=720h`, and that no `volume`/`container` prune appears.
+- [x] Implement command construction behind an injectable runner.
+- [x] Verify before/after `df` delta → toast → log append.
+- [x] Run tests; confirm pass. Do not execute real prunes.
+
+**Done:** `prune_commands()`, `Report`, `run_prune()`, `log_report()`, `notify_report()` in `docker_janitor.py`; 6 unit tests in `tests/test_prune.py`. Prune commands strictly filter build cache and images, excluding volumes and containers. Before/after system df deltas are logged to `~/.local/state/docker-janitor.log` and toasted to the user.
 
 ### Task 7 — Wire it up
 

@@ -36,6 +36,10 @@ CONFIG_PATH = os.path.join(
     APP_ID,
     "config.env",
 )
+LOG_PATH = os.path.join(
+    os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"),
+    APP_ID + ".log",
+)
 
 
 @dataclass(frozen=True)
@@ -517,6 +521,62 @@ def ask_continue(preview, runner=_run_zenity):
         "--text=" + summarize(preview),
     ]
     return runner(argv) == 0
+
+
+def prune_commands(config):
+    """Safe prune commands: only build cache and images, never volumes or containers."""
+    return [
+        ["builder", "prune", "-af", "--filter", "until=%dh" % config.cache_min_age_hours],
+        ["image", "prune", "-f"],
+        ["image", "prune", "-af", "--filter", "until=%dh" % (config.image_min_age_days * 24)],
+    ]
+
+
+@dataclass(frozen=True)
+class Report:
+    reclaimed_bytes: int
+    before_bytes: int
+    after_bytes: int
+    timestamp: datetime = field(default_factory=lambda: datetime.now().astimezone())
+
+
+def run_prune(cmds, runner=run_docker):
+    """Execute the prune commands and return before/after stats."""
+    before_df = parse_system_df(runner("system", "df"))
+    for cmd in cmds:
+        runner(*cmd)
+    after_df = parse_system_df(runner("system", "df"))
+
+    before_bytes = sum(item["size"] for item in before_df.values())
+    after_bytes = sum(item["size"] for item in after_df.values())
+    reclaimed_bytes = max(0, before_bytes - after_bytes)
+
+    return Report(
+        reclaimed_bytes=reclaimed_bytes,
+        before_bytes=before_bytes,
+        after_bytes=after_bytes,
+    )
+
+
+def log_report(report, path=LOG_PATH):
+    """Append a timestamped summary of reclaimed space to the log file."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(
+            "%s reclaimed %s (before: %s, after: %s)\n"
+            % (
+                report.timestamp.isoformat(),
+                human_bytes(report.reclaimed_bytes),
+                human_bytes(report.before_bytes),
+                human_bytes(report.after_bytes),
+            )
+        )
+
+
+def notify_report(report, notifier=show_toast):
+    """Post a desktop notification with the cleanup result."""
+    msg = "Docker Janitor reclaimed %s." % human_bytes(report.reclaimed_bytes)
+    notifier("Docker Janitor", msg)
 
 
 class JanitorApp:
