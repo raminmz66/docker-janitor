@@ -118,12 +118,11 @@ class WireAppTests(unittest.TestCase):
         self.assertIn("daemon unreachable", self.toasts[0][1])
         self.assertTrue(app._run_item.get_sensitive())
 
-    def test_skip_dialog_executes_no_prunes(self):
+    def test_skip_in_hud_executes_no_prunes(self):
         docker = FakeDockerRunner()
         app = dj.JanitorApp()
         app._config = self.config
         app._runner = docker
-        app._dialog_runner = lambda argv: 1  # User clicks Skip (zenity exit 1)
         app._notifier = self._notifier
         app._log_path = self.log_path
 
@@ -135,18 +134,24 @@ class WireAppTests(unittest.TestCase):
             app._worker_thread.join(timeout=2.0)
         drain_glib_events()
 
+        # HUD should now be open
+        self.assertIsNotNone(app._hud_window)
+
+        # User presses Escape / dismisses HUD
+        app._hud_window.on_escape_pressed()
+        self.assertIsNone(app._hud_window)
+
         # Check no prune command was sent to docker
         for call in docker.calls:
             self.assertNotIn("prune", call)
         self.assertFalse(os.path.exists(self.log_path))
         self.assertTrue(app._run_item.get_sensitive())
 
-    def test_continue_executes_prune_and_logs(self):
+    def test_clean_in_hud_executes_prune_and_logs(self):
         docker = FakeDockerRunner()
         app = dj.JanitorApp()
         app._config = self.config
         app._runner = docker
-        app._dialog_runner = lambda argv: 0  # User clicks Continue (zenity exit 0)
         app._notifier = self._notifier
         app._log_path = self.log_path
 
@@ -154,6 +159,14 @@ class WireAppTests(unittest.TestCase):
         app._run_item = menu.get_children()[0]
 
         app.on_run()
+        if app._worker_thread:
+            app._worker_thread.join(timeout=2.0)
+        drain_glib_events()
+
+        # HUD is open; user clicks the clean button
+        self.assertIsNotNone(app._hud_window)
+        app._hud_window._clean_button.clicked()
+
         if app._worker_thread:
             app._worker_thread.join(timeout=2.0)
         drain_glib_events()
@@ -163,7 +176,7 @@ class WireAppTests(unittest.TestCase):
         self.assertTrue(len(prune_calls) >= 2)
         self.assertTrue(os.path.exists(self.log_path))
         self.assertTrue(len(self.toasts) >= 1)
-        self.assertTrue(app._run_item.get_sensitive())
+        self.assertIn("reclaimed", self.toasts[0][1].lower())
 
 
 if __name__ == "__main__":

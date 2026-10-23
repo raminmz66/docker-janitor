@@ -845,6 +845,7 @@ class JanitorApp:
         self._lock = None
         self._run_item = None
         self._running = False
+        self._hud_window = None
         self._config = config or load_config(CONFIG_PATH)
         self._runner = runner
         self._dialog_runner = dialog_runner
@@ -867,47 +868,93 @@ class JanitorApp:
         return indicator
 
     def on_run(self, *_args):
-        """Start preview and cleanup in a background worker."""
+        """Show HUD popover or start preview query."""
         if self._running:
             return False
+        if self._hud_window:
+            self._hud_window.present()
+            return True
+
         self._running = True
         if self._run_item:
             self._run_item.set_sensitive(False)
 
-        self._worker_thread = threading.Thread(target=self._run_cycle, daemon=True)
+        self._worker_thread = threading.Thread(target=self._query_preview, daemon=True)
         self._worker_thread.start()
         return True
 
-    def _run_cycle(self):
+    def _query_preview(self):
         try:
-            try:
-                preview = collect_preview(self._config, runner=self._runner)
-            except DockerError as exc:
-                self._notifier("Docker Janitor", "Docker error: %s" % exc)
-                return
-
-            if preview.empty:
-                self._notifier("Docker Janitor", "No Docker data to clean up.")
-                return
-
-            confirmed = ask_continue(preview, runner=self._dialog_runner)
-            if not confirmed:
-                return
-
-            try:
-                cmds = prune_commands(self._config)
-                report = run_prune(cmds, runner=self._runner)
-                log_report(report, path=self._log_path)
-                notify_report(report, notifier=self._notifier)
-            except DockerError as exc:
-                self._notifier("Docker Janitor", "Prune failed: %s" % exc)
-        except Exception as exc:
-            try:
-                self._notifier("Docker Janitor", "Unexpected error: %s" % exc)
-            except Exception:
-                pass
-        finally:
+            preview = collect_preview(self._config, runner=self._runner)
+            GLib.idle_add(self._show_hud, preview)
+        except DockerError as exc:
+            self._notifier("Docker Janitor", "Docker error: %s" % exc)
             GLib.idle_add(self._on_cycle_complete)
+        except Exception as exc:
+            self._notifier("Docker Janitor", "Unexpected error: %s" % exc)
+            GLib.idle_add(self._on_cycle_complete)
+
+    def _show_hud(self, preview):
+        self._running = False
+        if self._run_item:
+            self._run_item.set_sensitive(True)
+
+        if self._hud_window:
+            self._hud_window.destroy()
+
+        win = JanitorHudWindow(
+            preview,
+            on_clean=self._on_hud_clean,
+            on_close=self._on_hud_closed,
+            on_exit_app=self.quit_app,
+        )
+        self._hud_window = win
+        win.position_near_tray()
+        win.show_all()
+        return False
+
+    def _on_hud_clean(self):
+        if self._running:
+            return
+        self._running = True
+        if self._run_item:
+            self._run_item.set_sensitive(False)
+        self._worker_thread = threading.Thread(target=self._execute_prune, daemon=True)
+        self._worker_thread.start()
+
+    def _execute_prune(self):
+        try:
+            cmds = prune_commands(self._config)
+            report = run_prune(cmds, runner=self._runner)
+            log_report(report, path=self._log_path)
+            notify_report(report, notifier=self._notifier)
+            GLib.idle_add(self._on_prune_complete, report)
+        except DockerError as exc:
+            self._notifier("Docker Janitor", "Prune failed: %s" % exc)
+            GLib.idle_add(self._on_cycle_complete)
+        except Exception as exc:
+            self._notifier("Docker Janitor", "Unexpected error: %s" % exc)
+            GLib.idle_add(self._on_cycle_complete)
+
+    def _on_prune_complete(self, report):
+        if self._hud_window:
+            self._hud_window._clean_button.set_label(
+                "Cleaned %s!" % human_bytes(report.reclaimed_bytes)
+            )
+            GLib.timeout_add(1000, self._close_hud_after_clean)
+        else:
+            self._on_cycle_complete()
+        return False
+
+    def _close_hud_after_clean(self):
+        if self._hud_window:
+            self._hud_window.destroy()
+            self._hud_window = None
+        self._on_cycle_complete()
+        return False
+
+    def _on_hud_closed(self):
+        self._hud_window = None
 
     def _on_cycle_complete(self):
         self._running = False
@@ -916,6 +963,9 @@ class JanitorApp:
         return False
 
     def quit_app(self, *_args):
+        if self._hud_window:
+            self._hud_window.destroy()
+            self._hud_window = None
         self._indicator = None
         Gtk.main_quit()
 
