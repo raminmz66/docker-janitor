@@ -662,6 +662,8 @@ class CacheRecord:
     reclaimable: bool
     shared: bool
     size: int
+    parents: tuple = ()
+    last_used: str = ""
 
 
 def parse_images(text):
@@ -687,14 +689,23 @@ def parse_images(text):
 
 
 def parse_used_ids(text):
-    """Short image IDs currently referenced by any container (running or not)."""
+    """Image IDs and repository/tag references currently referenced by any container."""
     used = set()
     for raw in (text or "").splitlines():
         raw = raw.strip()
-        if raw.startswith("sha256:"):
-            used.add(raw[7:19])
-        elif raw:
-            used.add(raw[:12])
+        if not raw:
+            continue
+        parts = raw.split("|||")
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if part.startswith("sha256:"):
+                used.add(part[7:19])
+            elif len(part) == 64 and all(c in "0123456789abcdefABCDEF" for c in part):
+                used.add(part[:12])
+            else:
+                used.add(part)
     return used
 
 
@@ -722,6 +733,7 @@ def parse_cache_records(text):
     """Paragraphs from `docker buildx du --verbose`."""
     records = []
     current = {}
+    parents = []
 
     def flush():
         if current.get("created") is not None and current.get("size") is not None:
@@ -732,14 +744,20 @@ def parse_cache_records(text):
                     reclaimable=current.get("reclaimable", False),
                     shared=current.get("shared", False),
                     size=current["size"],
+                    parents=tuple(parents),
+                    last_used=current.get("last_used", ""),
                 )
             )
             current.clear()
+            parents.clear()
 
     for raw in (text or "").splitlines():
         line = raw.strip()
         if not line:
             flush()
+            continue
+        if line.startswith("- "):
+            parents.append(line[2:].strip())
             continue
         label, _sep, value = line.partition(":")
         value = value.strip()
@@ -751,6 +769,8 @@ def parse_cache_records(text):
                 current["created"] = parse_timestamp(value)
             except ValueError:
                 current["created"] = None
+        elif label == "Last used":
+            current["last_used"] = value
         elif label == "Reclaimable":
             current["reclaimable"] = value == "true"
         elif label == "Shared":
@@ -768,6 +788,8 @@ def unused_images(images, used_ids, now, min_age_days):
         image
         for image in images
         if image.id not in used_ids
+        and image.repository not in used_ids
+        and ("%s:%s" % (image.repository, image.tag)) not in used_ids
         and not (image.repository == "<none>" and image.tag == "<none>")
         and image.created < cutoff
     ]
@@ -781,14 +803,53 @@ def dangling_images(images):
     ]
 
 
+def _is_cache_recent(last_used, created, now, min_age_hours):
+    if not last_used:
+        return created is not None and created >= (now - timedelta(hours=min_age_hours))
+    text = last_used.lower().strip()
+    if any(w in text for w in ("just now", "second", "minute", "an hour", "a minute")):
+        return True
+    m = re.search(r"(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago", text)
+    if m:
+        count, unit = int(m.group(1)), m.group(2)
+        unit_hours = {
+            "second": 1 / 3600,
+            "minute": 1 / 60,
+            "hour": 1,
+            "day": 24,
+            "week": 168,
+            "month": 720,
+            "year": 8760,
+        }
+        approx_hours = count * unit_hours.get(unit, 1)
+        return approx_hours < min_age_hours
+    return created is not None and created >= (now - timedelta(hours=min_age_hours))
+
+
 def prunable_cache(records, now, min_age_hours):
-    """Only private, reclaimable records: shared ones are still needed by images."""
-    cutoff = now - timedelta(hours=min_age_hours)
-    return [
-        record
-        for record in records
-        if record.reclaimable and not record.shared and record.created < cutoff
-    ]
+    """Reclaimable records whose dependency subtrees are older than the threshold."""
+    by_id = {r.id: r for r in records}
+    protected = {
+        r.id
+        for r in records
+        if not (
+            r.reclaimable
+            and not r.shared
+            and not _is_cache_recent(r.last_used, r.created, now, min_age_hours)
+        )
+    }
+    stack = list(protected)
+    while stack:
+        curr_id = stack.pop()
+        curr = by_id.get(curr_id)
+        if not curr:
+            continue
+        for parent_id in curr.parents:
+            if parent_id in by_id and parent_id not in protected:
+                protected.add(parent_id)
+                stack.append(parent_id)
+
+    return [r for r in records if r.id not in protected]
 
 
 @dataclass(frozen=True)
@@ -875,7 +936,13 @@ def collect_preview(config, runner=run_docker, now=None):
     used = set()
     if container_ids:
         used = parse_used_ids(
-            runner("container", "inspect", "--format", "{{.Image}}", *container_ids)
+            runner(
+                "container",
+                "inspect",
+                "--format",
+                "{{.Image}}|||{{.Config.Image}}",
+                *container_ids,
+            )
         )
     unique = parse_unique_sizes(runner("system", "df", "-v"))
     if now is None:
@@ -995,7 +1062,10 @@ def log_report(report, path=LOG_PATH):
 
 def notify_report(report, notifier=show_toast):
     """Post a desktop notification with the cleanup result."""
-    msg = "Docker Janitor reclaimed %s." % human_bytes(report.reclaimed_bytes)
+    if report.reclaimed_bytes == 0:
+        msg = "Docker storage is already clean (0 B reclaimed)."
+    else:
+        msg = "Docker Janitor reclaimed %s." % human_bytes(report.reclaimed_bytes)
     notifier("Docker Janitor", msg)
 
 
@@ -1114,9 +1184,12 @@ class JanitorApp:
 
     def _on_prune_complete(self, report):
         if self._hud_window:
-            self._hud_window._clean_button.set_label(
-                "Cleaned %s!" % human_bytes(report.reclaimed_bytes)
+            label = (
+                "Already clean!"
+                if report.reclaimed_bytes == 0
+                else "Cleaned %s!" % human_bytes(report.reclaimed_bytes)
             )
+            self._hud_window._clean_button.set_label(label)
             GLib.timeout_add(1000, self._close_hud_after_clean)
         else:
             self._on_cycle_complete()

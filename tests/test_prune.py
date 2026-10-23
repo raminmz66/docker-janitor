@@ -108,6 +108,19 @@ class RunPruneTests(unittest.TestCase):
         self.assertEqual(seen[0][0], "Docker Janitor")
         self.assertIn("24.4 GB", seen[0][1])
 
+    def test_notify_report_zero_bytes_shows_already_clean(self):
+        seen = []
+        report = dj.Report(
+            reclaimed_bytes=0,
+            before_bytes=45986298300,
+            after_bytes=45986298300,
+        )
+        dj.notify_report(report, notifier=lambda title, msg: seen.append((title, msg)))
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0][0], "Docker Janitor")
+        self.assertIn("already clean", seen[0][1].lower())
+        self.assertNotIn("reclaimed 0 B.", seen[0][1])
+
 
 if __name__ == "__main__":
     unittest.main()

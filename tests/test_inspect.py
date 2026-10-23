@@ -67,6 +67,19 @@ class UnusedImageTests(unittest.TestCase):
         picked = dj.unused_images(self.images, self.used, NOW, 0)
         self.assertFalse({image.id for image in picked} & self.used)
 
+    def test_image_referenced_by_repository_name_is_not_selected(self):
+        images = [
+            dj.ImageRow(
+                id="aabbccddeeff",
+                repository="my-app",
+                tag="latest",
+                created=NOW - timedelta(days=60),
+            )
+        ]
+        used_ids = dj.parse_used_ids("sha256:112233445566|||my-app")
+        picked = dj.unused_images(images, used_ids, NOW, 30)
+        self.assertEqual(picked, [])
+
     def test_dangling_images_are_counted_separately(self):
         self.assertEqual(dj.dangling_images(self.images), [])
 
@@ -81,6 +94,29 @@ class CacheRecordTests(unittest.TestCase):
     def test_nothing_recent_is_selected(self):
         records = dj.parse_cache_records(fixture("buildx_du_verbose.txt"))
         self.assertEqual(dj.prunable_cache(records, NOW, 24 * 365 * 100), [])
+
+    def test_recent_child_protects_ancestor_records(self):
+        old_time = NOW - timedelta(days=20)
+        parent = dj.CacheRecord(
+            id="parent1",
+            created=old_time,
+            reclaimable=True,
+            shared=False,
+            size=1000,
+            parents=(),
+            last_used="20 days ago",
+        )
+        child = dj.CacheRecord(
+            id="child1",
+            created=old_time,
+            reclaimable=True,
+            shared=False,
+            size=500,
+            parents=("parent1",),
+            last_used="30 minutes ago",
+        )
+        chosen = dj.prunable_cache([parent, child], NOW, 168)
+        self.assertEqual(chosen, [])
 
 
 class SummarizeTests(unittest.TestCase):
