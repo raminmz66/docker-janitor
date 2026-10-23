@@ -140,9 +140,11 @@ Steps:
 **Files:** create `~/.config/autostart/docker-janitor.desktop`, `README.md`
 
 Steps:
-- [ ] Write the desktop entry pointing at `/usr/bin/python3 /home/ramin/projects/docker-janitor/docker_janitor.py`.
-- [ ] Validate it (`desktop-file-validate` if present).
-- [ ] Document thresholds, log path, disable steps.
+- [x] Write the desktop entry pointing at `/usr/bin/python3 /home/ramin/projects/docker-janitor/docker_janitor.py`.
+- [x] Validate it (`desktop-file-validate` if present).
+- [x] Document thresholds, log path, disable steps.
+
+**Done:** Autostart desktop entry created at `~/.config/autostart/docker-janitor.desktop` and verified with `desktop-file-validate`. `README.md` created covering configuration, safety invariants, logging, autostart management, and running tests.
 
 ### Pending decision — log rotation
 
