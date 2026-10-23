@@ -38,10 +38,10 @@ class MenuTests(unittest.TestCase):
         labels = [child.get_label() for child in menu.get_children()]
         self.assertEqual(labels, ["Run", "Exit"])
 
-    def test_run_item_starts_insensitive(self):
+    def test_run_item_starts_sensitive(self):
         menu = docker_janitor.build_menu(on_run=lambda *_: None, on_exit=lambda *_: None)
         run_item = menu.get_children()[0]
-        self.assertFalse(run_item.get_sensitive())
+        self.assertTrue(run_item.get_sensitive())
 
 
 if __name__ == "__main__":

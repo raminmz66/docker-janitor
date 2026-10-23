@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import List
@@ -21,7 +22,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("AyatanaAppIndicator3", "0.1")
 
 from gi.repository import AyatanaAppIndicator3 as AppIndicator  # noqa: E402
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import GLib, Gtk  # noqa: E402
 
 APP_ID = "docker-janitor"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -107,11 +108,11 @@ def acquire_lock(path):
 
 
 def build_menu(on_run, on_exit):
-    """Menu with exactly two entries; Run stays disabled until wired up."""
+    """Menu with exactly two entries: Run and Exit."""
     menu = Gtk.Menu()
 
     run_item = Gtk.MenuItem(label="Run")
-    run_item.set_sensitive(False)
+    run_item.set_sensitive(True)
     run_item.connect("activate", on_run)
     menu.append(run_item)
 
@@ -581,9 +582,24 @@ def notify_report(report, notifier=show_toast):
 
 class JanitorApp:
 
-    def __init__(self):
+    def __init__(
+        self,
+        config=None,
+        runner=run_docker,
+        dialog_runner=_run_zenity,
+        notifier=show_toast,
+        log_path=LOG_PATH,
+    ):
         self._indicator = None
         self._lock = None
+        self._run_item = None
+        self._running = False
+        self._config = config or load_config(CONFIG_PATH)
+        self._runner = runner
+        self._dialog_runner = dialog_runner
+        self._notifier = notifier
+        self._log_path = log_path
+        self._worker_thread = None
 
     def build_indicator(self):
         indicator = AppIndicator.Indicator.new(
@@ -592,14 +608,61 @@ class JanitorApp:
         if os.path.isdir(ICON_DIR):
             indicator.set_icon_theme_path(ICON_DIR)
         indicator.set_icon_full(icon_reference(), "Docker Janitor")
-        indicator.set_menu(build_menu(self.on_run, self.quit_app))
+        menu = build_menu(self.on_run, self.quit_app)
+        self._run_item = menu.get_children()[0]
+        indicator.set_menu(menu)
         indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
         self._indicator = indicator
         return indicator
 
     def on_run(self, *_args):
-        """Task 7 wires the preview/prune cycle in here."""
-        return
+        """Start preview and cleanup in a background worker."""
+        if self._running:
+            return False
+        self._running = True
+        if self._run_item:
+            self._run_item.set_sensitive(False)
+
+        self._worker_thread = threading.Thread(target=self._run_cycle, daemon=True)
+        self._worker_thread.start()
+        return True
+
+    def _run_cycle(self):
+        try:
+            try:
+                preview = collect_preview(self._config, runner=self._runner)
+            except DockerError as exc:
+                self._notifier("Docker Janitor", "Docker error: %s" % exc)
+                return
+
+            if preview.empty:
+                self._notifier("Docker Janitor", "No Docker data to clean up.")
+                return
+
+            confirmed = ask_continue(preview, runner=self._dialog_runner)
+            if not confirmed:
+                return
+
+            try:
+                cmds = prune_commands(self._config)
+                report = run_prune(cmds, runner=self._runner)
+                log_report(report, path=self._log_path)
+                notify_report(report, notifier=self._notifier)
+            except DockerError as exc:
+                self._notifier("Docker Janitor", "Prune failed: %s" % exc)
+        except Exception as exc:
+            try:
+                self._notifier("Docker Janitor", "Unexpected error: %s" % exc)
+            except Exception:
+                pass
+        finally:
+            GLib.idle_add(self._on_cycle_complete)
+
+    def _on_cycle_complete(self):
+        self._running = False
+        if self._run_item:
+            self._run_item.set_sensitive(True)
+        return False
 
     def quit_app(self, *_args):
         self._indicator = None

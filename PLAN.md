@@ -129,9 +129,11 @@ Steps:
 **Files:** modify `docker_janitor.py`
 
 Steps:
-- [ ] `Run` starts a worker thread, disables itself, marshals updates with `GLib.idle_add`.
-- [ ] Verify double-click `Run` starts one job.
-- [ ] Verify a forced failure logs and toasts without killing the indicator.
+- [x] `Run` starts a worker thread, disables itself, marshals updates with `GLib.idle_add`.
+- [x] Verify double-click `Run` starts one job.
+- [x] Verify a forced failure logs and toasts without killing the indicator.
+
+**Done:** `JanitorApp.on_run` launches the preview and prune workflow in a background worker thread, disables the `Run` menu item during execution, safely marshals completion back via `GLib.idle_add`, and routes failures to desktop notifications. 4 unit tests in `tests/test_wire.py`.
 
 ### Task 8 — Autostart and README
 
