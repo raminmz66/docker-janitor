@@ -450,7 +450,7 @@ def collect_preview(config, runner=run_docker, now=None):
     """Read-only snapshot of what a prune would free. Deletes nothing."""
     runner("info")
 
-    df = parse_system_df(runner("system df"))
+    df = parse_system_df(runner("system", "df"))
     images = parse_images(runner("images", "--format", "{{json .}}"))
     container_ids = [line.strip() for line in runner("ps", "-aq").split() if line.strip()]
     used = set()
@@ -458,7 +458,7 @@ def collect_preview(config, runner=run_docker, now=None):
         used = parse_used_ids(
             runner("container", "inspect", "--format", "{{.Image}}", *container_ids)
         )
-    unique = parse_unique_sizes(runner("system df", "-v"))
+    unique = parse_unique_sizes(runner("system", "df", "-v"))
     if now is None:
         now = datetime.now().astimezone()
 

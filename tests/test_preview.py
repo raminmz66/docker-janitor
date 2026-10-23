@@ -60,6 +60,10 @@ class CollectPreviewTests(unittest.TestCase):
         self.assertEqual(preview.image_bytes, 3558350010)
         self.assertEqual(preview.image_count, 19)
         self.assertFalse(preview.estimated)
+        self.assertIn(("system", "df"), self.docker.calls)
+        self.assertIn(("system", "df", "-v"), self.docker.calls)
+        self.assertNotIn(("system df",), self.docker.calls)
+        self.assertNotIn(("system df", "-v"), self.docker.calls)
 
     def test_volumes_and_containers_are_reported_not_removed(self):
         preview = dj.collect_preview(self.config, self.docker, now=NOW)
