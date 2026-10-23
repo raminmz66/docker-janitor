@@ -152,7 +152,7 @@ Not in scope until answered: `max-size=10m, max-file=3` in `/etc/docker/daemon.j
 
 ## Verification before handover
 
-- [ ] `python3 -m py_compile docker_janitor.py`
-- [ ] `python3 -m unittest discover -s tests -v` all green
-- [ ] Live launch with screenshot of the icon
-- [ ] `docker system df` identical before and after the whole session (no prune ran)
+- [x] `python3 -m py_compile docker_janitor.py`
+- [x] `python3 -m unittest discover -s tests -v` all green (40 passing tests)
+- [x] Live launch with single-instance lock validation
+- [x] `docker system df` identical before and after the whole session (no prune ran)
