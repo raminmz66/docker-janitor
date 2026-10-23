@@ -87,6 +87,32 @@ class HudWindowTests(unittest.TestCase):
         self.assertEqual(len(closed), 1)
         win.destroy()
 
+    def test_hud_initializes_in_scanning_state_when_preview_none(self):
+        win = dj.JanitorHudWindow(preview=None)
+        self.assertTrue(win._is_scanning)
+        self.assertFalse(win._clean_button.get_sensitive())
+        self.assertEqual(win._clean_button.get_label(), "Calculating Space...")
+        win.destroy()
+
+    def test_set_preview_transitions_from_scanning_to_ready(self):
+        win = dj.JanitorHudWindow(preview=None)
+        self.assertTrue(win._is_scanning)
+        win.set_preview(self.preview)
+        self.assertFalse(win._is_scanning)
+        self.assertEqual(win._hero_label.get_text(), "24.4 GB")
+        self.assertTrue(win._clean_button.get_sensitive())
+        self.assertIn("Free 24.4 GB Now", win._clean_button.get_label())
+        win.destroy()
+
+    def test_set_error_transitions_to_error_state(self):
+        win = dj.JanitorHudWindow(preview=None)
+        win.set_error("daemon is not responding")
+        self.assertFalse(win._is_scanning)
+        self.assertEqual(win._hero_label.get_text(), "Docker Unavailable")
+        self.assertEqual(win._clean_button.get_label(), "Close")
+        self.assertTrue(win._clean_button.get_sensitive())
+        win.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()

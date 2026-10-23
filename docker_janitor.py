@@ -364,11 +364,13 @@ def build_segmented_bar(cache_bytes, image_bytes, kept_bytes):
 
 
 class JanitorHudWindow(Gtk.Window):
-    def __init__(self, preview, on_clean=None, on_close=None, on_exit_app=None):
+    def __init__(self, preview=None, on_clean=None, on_close=None, on_exit_app=None):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         ensure_hud_css()
 
         self.preview = preview
+        self._is_scanning = preview is None
+        self._is_error = False
         self.on_clean_callback = on_clean
         self.on_close_callback = on_close
         self.on_exit_app_callback = on_exit_app
@@ -426,58 +428,135 @@ class JanitorHudWindow(Gtk.Window):
 
         # Hero Stat
         hero_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        self._hero_label = Gtk.Label(label=human_bytes(self.preview.total_bytes))
+        hero_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        hero_row.set_halign(Gtk.Align.CENTER)
+
+        self._spinner = Gtk.Spinner()
+        hero_row.pack_start(self._spinner, False, False, 0)
+
+        self._hero_label = Gtk.Label()
         self._hero_label.get_style_context().add_class("janitor-hero-number")
-        hero_sub = Gtk.Label(label="Reclaimable without affecting active projects")
-        hero_sub.get_style_context().add_class("dim-label")
-        hero_box.pack_start(self._hero_label, False, False, 0)
-        hero_box.pack_start(hero_sub, False, False, 0)
+        hero_row.pack_start(self._hero_label, False, False, 0)
+        hero_box.pack_start(hero_row, False, False, 0)
+
+        self._hero_sub = Gtk.Label()
+        self._hero_sub.get_style_context().add_class("dim-label")
+        hero_box.pack_start(self._hero_sub, False, False, 0)
         card.pack_start(hero_box, False, False, 0)
 
-        # Segmented Storage Bar
-        kept_bytes = self.preview.kept_volumes_bytes + self.preview.kept_containers_bytes
-        bar = build_segmented_bar(
-            self.preview.cache_bytes, self.preview.image_bytes, kept_bytes
-        )
-        card.pack_start(bar, False, False, 0)
+        # Bar container
+        self._bar_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        card.pack_start(self._bar_container, False, False, 0)
 
-        # Legend
-        legend = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        cache_lbl = Gtk.Label(label="● Cache: %s" % human_bytes(self.preview.cache_bytes))
-        cache_lbl.get_style_context().add_class("bar-legend-cache")
-        images_lbl = Gtk.Label(label="● Images: %s" % human_bytes(self.preview.image_bytes))
-        images_lbl.get_style_context().add_class("bar-legend-images")
-        legend.pack_start(cache_lbl, False, False, 0)
-        legend.pack_start(images_lbl, False, False, 0)
-        card.pack_start(legend, False, False, 0)
+        # Legend container
+        self._legend_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        card.pack_start(self._legend_box, False, False, 0)
 
         # Safety badge
-        badge = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        badge.get_style_context().add_class("janitor-badge")
-        badge_text = "🛡️ Protected: %d volumes (%s) & %d containers safe" % (
-            self.preview.kept_volumes_count,
-            human_bytes(self.preview.kept_volumes_bytes),
-            self.preview.kept_containers_count,
-        )
-        badge_lbl = Gtk.Label(label=badge_text)
-        badge.pack_start(badge_lbl, False, False, 0)
-        card.pack_start(badge, False, False, 0)
+        self._badge_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self._badge_box.get_style_context().add_class("janitor-badge")
+        self._badge_lbl = Gtk.Label()
+        self._badge_box.pack_start(self._badge_lbl, False, False, 0)
+        card.pack_start(self._badge_box, False, False, 0)
 
         # Primary Action Button
         actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        if self.preview.empty:
-            btn_label = "No Cleanup Needed"
-            sensitive = False
-        else:
-            btn_label = "Free %s Now" % human_bytes(self.preview.total_bytes)
-            sensitive = True
-
-        self._clean_button = Gtk.Button(label=btn_label)
+        self._clean_button = Gtk.Button()
         self._clean_button.get_style_context().add_class("janitor-btn-primary")
-        self._clean_button.set_sensitive(sensitive)
         self._clean_button.connect("clicked", self._on_clean_clicked)
         actions.pack_end(self._clean_button, True, True, 0)
         card.pack_start(actions, False, False, 0)
+
+        if self.preview is not None:
+            self.set_preview(self.preview)
+        else:
+            self._set_scanning_state()
+
+    def _set_scanning_state(self):
+        self._is_scanning = True
+        self._spinner.start()
+        self._spinner.show()
+        self._hero_label.set_text("Scanning...")
+        self._hero_sub.set_text("Inspecting Docker storage...")
+
+        # Placeholder bar
+        for child in self._bar_container.get_children():
+            self._bar_container.remove(child)
+        placeholder = Gtk.Box()
+        placeholder.get_style_context().add_class("bar-segment-kept")
+        placeholder.set_size_request(300, 10)
+        self._bar_container.pack_start(placeholder, True, True, 0)
+        self._bar_container.show_all()
+
+        for child in self._legend_box.get_children():
+            self._legend_box.remove(child)
+
+        self._badge_lbl.set_text("🛡️ Checking container & volume safety...")
+        self._clean_button.set_label("Calculating Space...")
+        self._clean_button.set_sensitive(False)
+
+    def set_preview(self, preview):
+        self.preview = preview
+        self._is_scanning = False
+        self._is_error = False
+        self._spinner.stop()
+        self._spinner.hide()
+
+        self._hero_label.set_text(human_bytes(preview.total_bytes))
+        self._hero_sub.set_text("Reclaimable without affecting active projects")
+
+        # Bar
+        for child in self._bar_container.get_children():
+            self._bar_container.remove(child)
+        kept_bytes = preview.kept_volumes_bytes + preview.kept_containers_bytes
+        bar = build_segmented_bar(preview.cache_bytes, preview.image_bytes, kept_bytes)
+        self._bar_container.pack_start(bar, True, True, 0)
+        self._bar_container.show_all()
+
+        # Legend
+        for child in self._legend_box.get_children():
+            self._legend_box.remove(child)
+        cache_lbl = Gtk.Label(label="● Cache: %s" % human_bytes(preview.cache_bytes))
+        cache_lbl.get_style_context().add_class("bar-legend-cache")
+        images_lbl = Gtk.Label(label="● Images: %s" % human_bytes(preview.image_bytes))
+        images_lbl.get_style_context().add_class("bar-legend-images")
+        self._legend_box.pack_start(cache_lbl, False, False, 0)
+        self._legend_box.pack_start(images_lbl, False, False, 0)
+        self._legend_box.show_all()
+
+        # Badge
+        badge_text = "🛡️ Protected: %d volumes (%s) & %d containers safe" % (
+            preview.kept_volumes_count,
+            human_bytes(preview.kept_volumes_bytes),
+            preview.kept_containers_count,
+        )
+        self._badge_lbl.set_text(badge_text)
+
+        # Button
+        if preview.empty:
+            self._clean_button.set_label("No Cleanup Needed")
+            self._clean_button.set_sensitive(False)
+        else:
+            self._clean_button.set_label("Free %s Now" % human_bytes(preview.total_bytes))
+            self._clean_button.set_sensitive(True)
+
+    def set_error(self, message):
+        self._is_scanning = False
+        self._is_error = True
+        self._spinner.stop()
+        self._spinner.hide()
+
+        self._hero_label.set_text("Docker Unavailable")
+        self._hero_sub.set_text(message)
+
+        for child in self._bar_container.get_children():
+            self._bar_container.remove(child)
+        for child in self._legend_box.get_children():
+            self._legend_box.remove(child)
+
+        self._badge_lbl.set_text("⚠️ Could not communicate with Docker daemon")
+        self._clean_button.set_label("Close")
+        self._clean_button.set_sensitive(True)
 
     def position_near_tray(self):
         display = Gdk.Display.get_default()
@@ -512,6 +591,9 @@ class JanitorHudWindow(Gtk.Window):
         return False
 
     def _on_clean_clicked(self, button):
+        if self._is_error:
+            self.on_escape_pressed()
+            return
         button.set_sensitive(False)
         button.set_label("Cleaning up...")
         if self.on_clean_callback:
@@ -954,12 +1036,24 @@ class JanitorApp:
         return indicator
 
     def on_run(self, *_args):
-        """Show HUD popover or start preview query."""
+        """Show HUD popover immediately in scanning state and start preview query."""
         if self._running:
+            if self._hud_window:
+                self._hud_window.present()
             return False
         if self._hud_window:
             self._hud_window.present()
             return True
+
+        win = JanitorHudWindow(
+            preview=None,
+            on_clean=self._on_hud_clean,
+            on_close=self._on_hud_closed,
+            on_exit_app=self.quit_app,
+        )
+        self._hud_window = win
+        win.position_near_tray()
+        win.show_all()
 
         self._running = True
         if self._run_item:
@@ -972,31 +1066,27 @@ class JanitorApp:
     def _query_preview(self):
         try:
             preview = collect_preview(self._config, runner=self._runner)
-            GLib.idle_add(self._show_hud, preview)
+            GLib.idle_add(self._on_preview_ready, preview)
         except DockerError as exc:
-            self._notifier("Docker Janitor", "Docker error: %s" % exc)
-            GLib.idle_add(self._on_cycle_complete)
+            GLib.idle_add(self._on_preview_error, str(exc))
         except Exception as exc:
-            self._notifier("Docker Janitor", "Unexpected error: %s" % exc)
-            GLib.idle_add(self._on_cycle_complete)
+            GLib.idle_add(self._on_preview_error, str(exc))
 
-    def _show_hud(self, preview):
+    def _on_preview_ready(self, preview):
         self._running = False
         if self._run_item:
             self._run_item.set_sensitive(True)
-
         if self._hud_window:
-            self._hud_window.destroy()
+            self._hud_window.set_preview(preview)
+        return False
 
-        win = JanitorHudWindow(
-            preview,
-            on_clean=self._on_hud_clean,
-            on_close=self._on_hud_closed,
-            on_exit_app=self.quit_app,
-        )
-        self._hud_window = win
-        win.position_near_tray()
-        win.show_all()
+    def _on_preview_error(self, err_msg):
+        self._running = False
+        if self._run_item:
+            self._run_item.set_sensitive(True)
+        if self._hud_window:
+            self._hud_window.set_error(err_msg)
+        self._notifier("Docker Janitor", "Docker error: %s" % err_msg)
         return False
 
     def _on_hud_clean(self):

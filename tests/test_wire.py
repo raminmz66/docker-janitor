@@ -97,6 +97,31 @@ class WireAppTests(unittest.TestCase):
         self.assertFalse(app._running)
         self.assertTrue(app._run_item.get_sensitive())
 
+    def test_run_opens_hud_immediately_in_scanning_state(self):
+        docker = FakeDockerRunner()
+        app = dj.JanitorApp()
+        app._config = self.config
+        app._runner = docker
+        app._notifier = self._notifier
+        app._log_path = self.log_path
+
+        menu = dj.build_menu(app.on_run, app.quit_app)
+        app._run_item = menu.get_children()[0]
+
+        app.on_run()
+        # Immediately after calling on_run, the window is already created in scanning mode
+        self.assertIsNotNone(app._hud_window)
+        self.assertTrue(app._hud_window._is_scanning)
+
+        # After worker finishes and GLib events drain, it transitions to ready
+        if app._worker_thread:
+            app._worker_thread.join(timeout=2.0)
+        drain_glib_events()
+
+        self.assertFalse(app._hud_window._is_scanning)
+        self.assertIn("Free", app._hud_window._clean_button.get_label())
+        app._hud_window.destroy()
+
     def test_daemon_down_shows_toast_without_crashing(self):
         docker = FakeDockerRunner(should_fail=True)
         app = dj.JanitorApp()
@@ -116,6 +141,38 @@ class WireAppTests(unittest.TestCase):
 
         self.assertTrue(len(self.toasts) >= 1)
         self.assertIn("daemon unreachable", self.toasts[0][1])
+        self.assertTrue(app._run_item.get_sensitive())
+        self.assertIsNotNone(app._hud_window)
+        self.assertTrue(app._hud_window._is_error)
+        self.assertEqual(app._hud_window._clean_button.get_label(), "Close")
+        app._hud_window.destroy()
+
+    def test_dismiss_during_scan_safely_ignores_finished_scan(self):
+        docker = FakeDockerRunner()
+        app = dj.JanitorApp()
+        app._config = self.config
+        app._runner = docker
+        app._notifier = self._notifier
+        app._log_path = self.log_path
+
+        menu = dj.build_menu(app.on_run, app.quit_app)
+        app._run_item = menu.get_children()[0]
+
+        app.on_run()
+        self.assertIsNotNone(app._hud_window)
+
+        # User dismisses HUD immediately while worker is still running
+        app._hud_window.on_escape_pressed()
+        self.assertIsNone(app._hud_window)
+
+        # Worker finishes later
+        if app._worker_thread:
+            app._worker_thread.join(timeout=2.0)
+        drain_glib_events()
+
+        # HUD remains None and app returns to idle state
+        self.assertIsNone(app._hud_window)
+        self.assertFalse(app._running)
         self.assertTrue(app._run_item.get_sensitive())
 
     def test_skip_in_hud_executes_no_prunes(self):
