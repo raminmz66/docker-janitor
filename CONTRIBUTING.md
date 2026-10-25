@@ -43,12 +43,15 @@ cd docker-janitor
 
 ### Running Locally
 ```bash
-# Launch the desktop indicator
+# Launch the desktop indicator directly
 python3 docker_janitor.py
 
 # Or inspect CLI flags
 python3 docker_janitor.py --version
 python3 docker_janitor.py --help
+
+# Or test the local user installer
+./install.sh --dry-run
 ```
 
 ---

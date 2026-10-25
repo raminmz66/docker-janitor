@@ -27,3 +27,11 @@ Full design document: [`docs/superpowers/specs/2026-10-25-project-identity-and-c
 - **`CONTRIBUTING.md`**: Guide for development setup, test execution, commit conventions, and pull request workflows.
 - **`pyproject.toml`**: Standard PEP 621 packaging metadata and entrypoint `docker-janitor`.
 - **`README.md`**: Badges, maintainer profile, issue reporting, and contribution instructions.
+
+## Automated Installation & Distribution Spec
+Full design document: [`docs/superpowers/specs/2026-10-25-automated-installer-design.md`](docs/superpowers/specs/2026-10-25-automated-installer-design.md)
+
+### 1. Zero-Friction Setup
+- **`install.sh`**: Portable Bash installer with distro detection (`apt`, `dnf`, `pacman`), automatic dependency checks (`python3-gi`, GTK 3, Ayatana AppIndicator), CLI flag inspection (`--dry-run`, `--no-autostart`, `--prefix`, `--help`), user binary installation (`~/.local/bin/docker-janitor`), scalable SVG icons, and desktop + autostart integration.
+- **`uninstall.sh`**: Clean remover for binaries, icons, and desktop launchers with `--dry-run` and optional `--purge` for user config and logs.
+- **`README.md`**: Prominent "Quick Installation" instructions right near the top.

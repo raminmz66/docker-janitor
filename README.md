@@ -22,6 +22,56 @@ A lightweight desktop system tray indicator for Linux that previews Docker disk 
 - **Single Instance**: Enforced via file lock (`$XDG_RUNTIME_DIR/docker-janitor.lock`). Launching again exits cleanly without duplicate tray icons.
 - **No Background Daemon or Sudo**: Runs strictly as the current user, using your existing Docker CLI permissions and standard desktop tools (PyGObject, GTK 3, `notify-send`).
 
+## Quick Installation
+
+Install Docker Janitor in seconds using the automated installer:
+
+### Method 1: Clone & Install (Recommended)
+
+```bash
+git clone https://github.com/raminmz66/docker-janitor.git
+cd docker-janitor
+./install.sh
+```
+
+### Method 2: One-Line Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/raminmz66/docker-janitor/main/install.sh | bash
+```
+
+The installer:
+- Checks for required system libraries (`python3-gi`, GTK 3, Ayatana AppIndicator) and helps install them if missing.
+- Installs the `docker-janitor` launcher into `~/.local/bin/`.
+- Configures the desktop application menu launcher and scalable SVG icons.
+- Enables session autostart (`~/.config/autostart/`) so the tray indicator is ready on login.
+
+### Installer Options
+
+```bash
+./install.sh --help
+
+# Preview actions without making changes
+./install.sh --dry-run
+
+# Skip autostart entry
+./install.sh --no-autostart
+
+# Run non-interactively
+./install.sh -y
+```
+
+### Uninstallation
+
+To cleanly remove the application and desktop shortcuts:
+
+```bash
+./uninstall.sh
+
+# Or to also purge configuration and state logs:
+./uninstall.sh --purge
+```
+
 ## CLI Usage
 
 ```bash
