@@ -33,10 +33,36 @@ class LockTests(unittest.TestCase):
 
 
 class MenuTests(unittest.TestCase):
-    def test_menu_contains_only_run_and_exit(self):
-        menu = docker_janitor.build_menu(on_run=lambda *_: None, on_exit=lambda *_: None)
-        labels = [child.get_label() for child in menu.get_children()]
-        self.assertEqual(labels, ["Run", "Exit"])
+    def test_menu_structure_contains_run_about_and_exit(self):
+        about_called = []
+        menu = docker_janitor.build_menu(
+            on_run=lambda *_: None,
+            on_about=lambda *_: about_called.append(True),
+            on_exit=lambda *_: None,
+        )
+        children = menu.get_children()
+        self.assertEqual(len(children), 4)
+
+        run_item, about_item, sep_item, exit_item = children
+        self.assertEqual(run_item.get_label(), "Run")
+        self.assertEqual(about_item.get_label(), "About Docker Janitor")
+        self.assertIsInstance(sep_item, Gtk.SeparatorMenuItem)
+        self.assertEqual(exit_item.get_label(), "Exit")
+
+        about_item.activate()
+        self.assertEqual(about_called, [True])
+
+    def test_menu_backward_compatible_with_two_arguments(self):
+        exit_called = []
+        menu = docker_janitor.build_menu(
+            on_run=lambda *_: None,
+            on_exit=lambda *_: exit_called.append(True),
+        )
+        children = menu.get_children()
+        self.assertEqual(len(children), 4)
+        exit_item = children[3]
+        exit_item.activate()
+        self.assertEqual(exit_called, [True])
 
     def test_run_item_starts_sensitive(self):
         menu = docker_janitor.build_menu(on_run=lambda *_: None, on_exit=lambda *_: None)

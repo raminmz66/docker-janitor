@@ -1,16 +1,40 @@
 # Docker Janitor
 
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/raminmz66/docker-janitor/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
+[![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)](https://www.kernel.org/)
+
 A lightweight desktop system tray indicator for Linux that previews Docker disk space cleanup, asks for confirmation with exact numbers, and prunes only when you choose to proceed.
 
-![Whale Icon](icons/docker-janitor.svg)
+<p align="center">
+  <img src="docs/screenshots/hud-window.png" alt="Docker Janitor Popover HUD" width="320">&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshots/about-dialog.png" alt="Docker Janitor About Dialog" width="440">
+</p>
 
 ## Highlights
 
 - **Safety First**: Never touches or prunes volumes or containers (active or stopped). Only unreferenced images and build cache entries older than configured age thresholds are ever prunable.
 - **Instant Popover HUD**: Clicking the tray icon opens a modern, frameless GTK popover immediately beneath the top panel with an instant scanning state and spinner. As Docker query data arrives, the HUD smoothly populates in-place with reclaimable storage totals, a segmented color breakdown bar, protected resource badges, and a single-click cleanup action.
+- **Identity & About Dialog**: Native `Gtk.AboutDialog` accessible from both the tray menu and the HUD header bar, displaying version, authorship, license, and repository links.
+- **CLI Flags**: Fast `--version` and `--help` CLI inspection without launching the GUI.
 - **Auto-Dismissal**: Pressing `Escape` or clicking anywhere outside the HUD card dismisses it immediately with zero Docker mutation.
 - **Single Instance**: Enforced via file lock (`$XDG_RUNTIME_DIR/docker-janitor.lock`). Launching again exits cleanly without duplicate tray icons.
 - **No Background Daemon or Sudo**: Runs strictly as the current user, using your existing Docker CLI permissions and standard desktop tools (PyGObject, GTK 3, `notify-send`).
+
+## CLI Usage
+
+```bash
+# Check version
+docker-janitor --version
+# or
+python3 docker_janitor.py -v
+
+# View command help
+docker-janitor --help
+# or
+python3 docker_janitor.py -h
+```
 
 ## Configuration
 
@@ -66,3 +90,20 @@ python3 -m unittest discover -s tests -v
 ```
 
 All inspection and prune tests execute against saved CLI fixtures; tests never touch live Docker daemons or issue prune commands.
+
+## Contributing & Collaboration
+
+We welcome contributions! Please review [CONTRIBUTING.md](CONTRIBUTING.md) for details on:
+- Code guidelines and safety invariants
+- Local development environment setup
+- Submitting bug reports and pull requests
+
+## Author & Maintainer
+
+**Ramin Maazallahi**  
+- GitHub: [@raminmz66](https://github.com/raminmz66)  
+- Email: `r.mazallahi-ext@initiative-crm.com`
+
+## License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

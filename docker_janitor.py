@@ -14,7 +14,6 @@ import sys
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import List
 
 import gi
 
@@ -25,6 +24,15 @@ from gi.repository import AyatanaAppIndicator3 as AppIndicator  # noqa: E402
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk  # noqa: E402
 
 APP_ID = "docker-janitor"
+__version__ = "0.1.0"
+__app_name__ = "Docker Janitor"
+__author__ = "Ramin Maazallahi"
+__email__ = "r.mazallahi-ext@initiative-crm.com"
+__license__ = "MIT"
+__website__ = "https://github.com/raminmz66/docker-janitor"
+__description__ = (
+    "A lightweight Linux desktop indicator for previewing and safely cleaning Docker disk space."
+)
 HERE = os.path.dirname(os.path.abspath(__file__))
 ICON_DIR = os.path.join(HERE, "icons")
 ICON_NAME = "docker-janitor"
@@ -107,14 +115,62 @@ def acquire_lock(path):
     return handle
 
 
-def build_menu(on_run, on_exit):
-    """Menu with exactly two entries: Run and Exit."""
+def show_about_dialog(parent=None):
+    """Display the native GTK About dialog for Docker Janitor."""
+    dialog = Gtk.AboutDialog()
+    if parent:
+        dialog.set_transient_for(parent)
+        dialog.set_modal(True)
+    dialog.set_program_name(__app_name__)
+    dialog.set_version(__version__)
+    dialog.set_comments(__description__)
+    dialog.set_copyright(f"© 2026 {__author__}")
+    dialog.set_website(__website__)
+    dialog.set_website_label("GitHub Repository")
+    dialog.set_authors([f"{__author__} <{__email__}>"])
+    dialog.set_license_type(Gtk.License.MIT_X11)
+
+    icon_path = os.path.join(ICON_DIR, ICON_NAME + ".svg")
+    if os.path.exists(icon_path):
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(icon_path, 96, 96, True)
+            dialog.set_logo(pixbuf)
+        except Exception:
+            pass
+
+    dialog.connect("response", lambda d, *_: d.destroy())
+    dialog.show_all()
+    dialog.present()
+    return dialog
+
+
+def build_menu(on_run, on_about=None, on_exit=None):
+    """Menu with Run, About Docker Janitor, Separator, and Exit."""
+    if on_exit is None and callable(on_about):
+        # Backward compatibility if called as build_menu(on_run, on_exit)
+        on_exit = on_about
+        on_about = None
+
+    if on_about is None:
+        def _default_on_about(*_):
+            return show_about_dialog()
+
+        on_about = _default_on_about
+
     menu = Gtk.Menu()
 
     run_item = Gtk.MenuItem(label="Run")
     run_item.set_sensitive(True)
     run_item.connect("activate", on_run)
     menu.append(run_item)
+
+    about_item = Gtk.MenuItem(label="About Docker Janitor")
+    about_item.set_sensitive(True)
+    about_item.connect("activate", on_about)
+    menu.append(about_item)
+
+    sep_item = Gtk.SeparatorMenuItem()
+    menu.append(sep_item)
 
     exit_item = Gtk.MenuItem(label="Exit")
     exit_item.connect("activate", on_exit)
@@ -273,20 +329,30 @@ window.janitor-hud {
     font-size: 11px;
     font-weight: 500;
 }
-button.janitor-close-btn {
+button.janitor-close-btn,
+button.janitor-info-btn,
+button.janitor-header-btn {
     border: none;
     background: transparent;
     background-image: none;
     box-shadow: none;
-    color: alpha(@theme_text_color, 0.45);
+    color: alpha(@theme_text_color, 0.5);
     border-radius: 6px;
-    padding: 2px 6px;
-    font-size: 13px;
-    font-weight: 700;
+    padding: 3px 5px;
 }
-button.janitor-close-btn:hover {
+button.janitor-close-btn:hover,
+button.janitor-info-btn:hover,
+button.janitor-header-btn:hover {
     background-color: alpha(@theme_text_color, 0.08);
     color: @theme_text_color;
+}
+.janitor-version-badge {
+    color: alpha(@theme_text_color, 0.5);
+    font-size: 10px;
+    font-weight: 500;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background-color: alpha(@theme_text_color, 0.08);
 }
 button.janitor-btn-primary {
     background-color: #0db7ed;
@@ -364,7 +430,14 @@ def build_segmented_bar(cache_bytes, image_bytes, kept_bytes):
 
 
 class JanitorHudWindow(Gtk.Window):
-    def __init__(self, preview=None, on_clean=None, on_close=None, on_exit_app=None):
+    def __init__(
+        self,
+        preview=None,
+        on_clean=None,
+        on_close=None,
+        on_exit_app=None,
+        on_about=None,
+    ):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         ensure_hud_css()
 
@@ -374,6 +447,7 @@ class JanitorHudWindow(Gtk.Window):
         self.on_clean_callback = on_clean
         self.on_close_callback = on_close
         self.on_exit_app_callback = on_exit_app
+        self.on_about = on_about
 
         self.set_decorated(False)
         self.set_type_hint(Gdk.WindowTypeHint.POPUP_MENU)
@@ -393,6 +467,12 @@ class JanitorHudWindow(Gtk.Window):
         self.connect("focus-out-event", self._on_focus_out)
 
         self._build_ui()
+
+    def _on_info_clicked(self):
+        if self.on_about:
+            self.on_about()
+        else:
+            show_about_dialog(parent=self)
 
     def _build_ui(self):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
@@ -417,13 +497,34 @@ class JanitorHudWindow(Gtk.Window):
         title_lbl = Gtk.Label(label="Docker Janitor")
         title_lbl.get_style_context().add_class("janitor-title")
         title_box.pack_start(title_lbl, False, False, 0)
+
+        version_lbl = Gtk.Label(label=f"v{__version__}")
+        version_lbl.get_style_context().add_class("janitor-version-badge")
+        title_box.pack_start(version_lbl, False, False, 0)
+
         header.pack_start(title_box, False, False, 0)
 
-        close_btn = Gtk.Button(label="✕")
-        close_btn.get_style_context().add_class("janitor-close-btn")
+        actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+
+        info_icon = Gtk.Image.new_from_icon_name("help-about-symbolic", Gtk.IconSize.MENU)
+        self._info_button = Gtk.Button()
+        self._info_button.set_image(info_icon)
+        self._info_button.get_style_context().add_class("janitor-header-btn")
+        self._info_button.set_relief(Gtk.ReliefStyle.NONE)
+        self._info_button.set_tooltip_text("About Docker Janitor")
+        self._info_button.connect("clicked", lambda *_: self._on_info_clicked())
+        actions_box.pack_start(self._info_button, False, False, 0)
+
+        close_icon = Gtk.Image.new_from_icon_name("window-close-symbolic", Gtk.IconSize.MENU)
+        close_btn = Gtk.Button()
+        close_btn.set_image(close_icon)
+        close_btn.get_style_context().add_class("janitor-header-btn")
         close_btn.set_relief(Gtk.ReliefStyle.NONE)
+        close_btn.set_tooltip_text("Dismiss")
         close_btn.connect("clicked", lambda *_: self.on_escape_pressed())
-        header.pack_end(close_btn, False, False, 0)
+        actions_box.pack_start(close_btn, False, False, 0)
+
+        header.pack_end(actions_box, False, False, 0)
         card.pack_start(header, False, False, 0)
 
         # Hero Stat
@@ -1098,12 +1199,15 @@ class JanitorApp:
         if os.path.isdir(ICON_DIR):
             indicator.set_icon_theme_path(ICON_DIR)
         indicator.set_icon_full(icon_reference(), "Docker Janitor")
-        menu = build_menu(self.on_run, self.quit_app)
+        menu = build_menu(self.on_run, self.on_about, self.quit_app)
         self._run_item = menu.get_children()[0]
         indicator.set_menu(menu)
         indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
         self._indicator = indicator
         return indicator
+
+    def on_about(self, *_args):
+        return show_about_dialog()
 
     def on_run(self, *_args):
         """Show HUD popover immediately in scanning state and start preview query."""
@@ -1120,6 +1224,7 @@ class JanitorApp:
             on_clean=self._on_hud_clean,
             on_close=self._on_hud_closed,
             on_exit_app=self.quit_app,
+            on_about=self.on_about,
         )
         self._hud_window = win
         win.position_near_tray()
@@ -1219,7 +1324,30 @@ class JanitorApp:
         Gtk.main_quit()
 
 
-def main():
+def print_help():
+    print(
+        f"{__app_name__} v{__version__}\n\n"
+        f"{__description__}\n\n"
+        "Usage:\n"
+        "  docker-janitor [OPTIONS]\n\n"
+        "Options:\n"
+        "  -v, --version  Show version and exit\n"
+        "  -h, --help     Show this help message and exit\n"
+    )
+
+
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+
+    if "--version" in argv or "-v" in argv:
+        print(f"{__app_name__} {__version__}")
+        return 0
+
+    if "--help" in argv or "-h" in argv:
+        print_help()
+        return 0
+
     handle = acquire_lock(lock_path())
     if handle is None:
         return 0  # another instance owns the panel icon

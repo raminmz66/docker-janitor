@@ -3,6 +3,7 @@
 import unittest
 
 import gi
+
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
@@ -111,6 +112,14 @@ class HudWindowTests(unittest.TestCase):
         self.assertEqual(win._hero_label.get_text(), "Docker Unavailable")
         self.assertEqual(win._clean_button.get_label(), "Close")
         self.assertTrue(win._clean_button.get_sensitive())
+        win.destroy()
+
+    def test_info_button_triggers_about_callback(self):
+        about_called = []
+        win = dj.JanitorHudWindow(self.preview, on_about=lambda: about_called.append(True))
+        self.assertIsNotNone(win._info_button)
+        win._info_button.clicked()
+        self.assertEqual(about_called, [True])
         win.destroy()
 
 

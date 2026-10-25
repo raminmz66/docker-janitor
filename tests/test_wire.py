@@ -2,10 +2,10 @@
 
 import os
 import tempfile
-import time
 import unittest
 
 import gi
+
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
@@ -41,7 +41,10 @@ class FakeDockerRunner:
                 "Build Cache     20        0         2.0GB     2.0GB\n"
             )
         if cmd == "images --format {{json .}}":
-            return '{"ID":"111111111111","Repository":"myrepo","Tag":"latest","CreatedAt":"2020-01-01 00:00:00 +0000"}\n'
+            return (
+                '{"ID":"111111111111","Repository":"myrepo",'
+                '"Tag":"latest","CreatedAt":"2020-01-01 00:00:00 +0000"}\n'
+            )
         if cmd == "ps -aq":
             return ""
         if cmd == "buildx du --verbose":
