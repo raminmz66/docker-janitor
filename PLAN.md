@@ -1,12 +1,15 @@
 # Docker Janitor — Master Plan
 
 Detailed task plans and designs:
+- [`docs/superpowers/plans/2026-10-28-align-image-preview-activity-plan.md`](docs/superpowers/plans/2026-10-28-align-image-preview-activity-plan.md)
+- [`docs/superpowers/specs/2026-10-28-align-image-preview-activity-design.md`](docs/superpowers/specs/2026-10-28-align-image-preview-activity-design.md)
 - [`docs/superpowers/plans/2026-10-25-automated-installer.md`](docs/superpowers/plans/2026-10-25-automated-installer.md)
 - [`docs/superpowers/specs/2026-10-25-automated-installer-design.md`](docs/superpowers/specs/2026-10-25-automated-installer-design.md)
 - [`docs/superpowers/plans/2026-10-25-project-identity-and-collaboration.md`](docs/superpowers/plans/2026-10-25-project-identity-and-collaboration.md)
 - [`docs/superpowers/specs/2026-10-25-project-identity-and-collaboration-design.md`](docs/superpowers/specs/2026-10-25-project-identity-and-collaboration-design.md)
 
-## Active Milestone: Automated Installation & Distribution
+## Active Milestone: Align Image Preview with Activity & Prune Filter
+**Goal:** Guarantee preview and prune consistency by querying Docker's `until` filter for eligible image candidates during preview.
 
 **Goal:** Provide zero-friction, one-command installation of Docker Janitor via `install.sh`, `uninstall.sh`, and documentation in `README.md`.
 

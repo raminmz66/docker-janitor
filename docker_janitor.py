@@ -882,7 +882,36 @@ def parse_cache_records(text):
     return records
 
 
-def unused_images(images, used_ids, now, min_age_days):
+def parse_image_ids(text):
+    """Parse newline-separated image IDs as produced by `docker images -q`."""
+    if not text:
+        return set()
+    return {line.strip() for line in text.splitlines() if line.strip()}
+
+
+def _matches_eligible_ids(image_id, eligible_ids):
+    """Check if image_id matches any eligible ID (prefix or exact, ignoring sha256:)."""
+    if eligible_ids is None:
+        return True
+    if not eligible_ids:
+        return False
+    clean_id = (
+        image_id.removeprefix("sha256:")
+        if hasattr(image_id, "removeprefix")
+        else (image_id[7:] if image_id.startswith("sha256:") else image_id)
+    )
+    for eid in eligible_ids:
+        clean_eid = (
+            eid.removeprefix("sha256:")
+            if hasattr(eid, "removeprefix")
+            else (eid[7:] if eid.startswith("sha256:") else eid)
+        )
+        if clean_id.startswith(clean_eid) or clean_eid.startswith(clean_id):
+            return True
+    return False
+
+
+def unused_images(images, used_ids, now, min_age_days, eligible_ids=None):
     """Tagged images no container references and older than the threshold."""
     cutoff = now - timedelta(days=min_age_days)
     return [
@@ -892,7 +921,11 @@ def unused_images(images, used_ids, now, min_age_days):
         and image.repository not in used_ids
         and ("%s:%s" % (image.repository, image.tag)) not in used_ids
         and not (image.repository == "<none>" and image.tag == "<none>")
-        and image.created < cutoff
+        and (
+            _matches_eligible_ids(image.id, eligible_ids)
+            if eligible_ids is not None
+            else image.created < cutoff
+        )
     ]
 
 
@@ -1049,7 +1082,22 @@ def collect_preview(config, runner=run_docker, now=None):
     if now is None:
         now = datetime.now().astimezone()
 
-    old_images = unused_images(images, used, now, config.image_min_age_days)
+    eligible_ids = None
+    try:
+        raw_ids = runner(
+            "images",
+            "-a",
+            "--filter",
+            "until=%dh" % (config.image_min_age_days * 24),
+            "-q",
+        )
+        eligible_ids = parse_image_ids(raw_ids)
+    except DockerError:
+        eligible_ids = None
+
+    old_images = unused_images(
+        images, used, now, config.image_min_age_days, eligible_ids=eligible_ids
+    )
     dangling = dangling_images(images)
 
     estimated = False

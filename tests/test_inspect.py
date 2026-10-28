@@ -83,6 +83,60 @@ class UnusedImageTests(unittest.TestCase):
     def test_dangling_images_are_counted_separately(self):
         self.assertEqual(dj.dangling_images(self.images), [])
 
+    def test_eligible_ids_filter_restricts_images_with_old_creation(self):
+        images = [
+            dj.ImageRow(
+                id="e5d8f06a60f2",
+                repository="dunglas/mercure",
+                tag="latest",
+                created=NOW - timedelta(days=35),
+            ),
+            dj.ImageRow(
+                id="aabbccddeeff",
+                repository="old-app",
+                tag="latest",
+                created=NOW - timedelta(days=40),
+            ),
+        ]
+        # Only aabbccddeeff matches the prune until filter
+        eligible_ids = {"aabbccddeeff"}
+        picked = dj.unused_images(images, set(), NOW, 30, eligible_ids=eligible_ids)
+        self.assertEqual([img.id for img in picked], ["aabbccddeeff"])
+
+    def test_empty_eligible_ids_selects_no_images(self):
+        images = [
+            dj.ImageRow(
+                id="e5d8f06a60f2",
+                repository="dunglas/mercure",
+                tag="latest",
+                created=NOW - timedelta(days=35),
+            )
+        ]
+        picked = dj.unused_images(images, set(), NOW, 30, eligible_ids=set())
+        self.assertEqual(picked, [])
+
+
+class ImageFilterHelperTests(unittest.TestCase):
+    def test_parse_image_ids(self):
+        raw = "e5d8f06a60f2\n  1f028471f346 \n\n"
+        self.assertEqual(dj.parse_image_ids(raw), {"e5d8f06a60f2", "1f028471f346"})
+        self.assertEqual(dj.parse_image_ids(""), set())
+        self.assertEqual(dj.parse_image_ids(None), set())
+
+    def test_matches_eligible_ids(self):
+        # exact match
+        self.assertTrue(dj._matches_eligible_ids("e5d8f06a60f2", {"e5d8f06a60f2"}))
+        # prefix match with sha256 prefix
+        full_hash = "sha256:e5d8f06a60f2feb5e91f7ba2046d9184f6339b3498b5d2f5adaeb5bcb080bfc7"
+        self.assertTrue(dj._matches_eligible_ids(full_hash, {"e5d8f06a60f2"}))
+        self.assertTrue(dj._matches_eligible_ids("e5d8f06a60f2", {full_hash}))
+        # not in set
+        self.assertFalse(dj._matches_eligible_ids("112233445566", {"e5d8f06a60f2"}))
+        # empty set
+        self.assertFalse(dj._matches_eligible_ids("e5d8f06a60f2", set()))
+        # None is fallback (accepts)
+        self.assertTrue(dj._matches_eligible_ids("e5d8f06a60f2", None))
+
 
 class CacheRecordTests(unittest.TestCase):
     def test_private_old_records_are_selected(self):

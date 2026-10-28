@@ -19,9 +19,11 @@ def fixture(name):
 class FakeDocker:
     """Answers the exact command lines collect_preview uses."""
 
-    def __init__(self, buildx_fails=False, info_fails=False):
+    def __init__(self, buildx_fails=False, info_fails=False, until_fails=False, until_output=None):
         self.buildx_fails = buildx_fails
         self.info_fails = info_fails
+        self.until_fails = until_fails
+        self.until_output = until_output
         self.calls = []
 
     def __call__(self, *args):
@@ -37,6 +39,15 @@ class FakeDocker:
             return fixture("system_df_verbose.txt")
         if command == "images --format {{json .}}":
             return fixture("images.jsonl")
+        if command.startswith("images -a --filter until=") and command.endswith("-q"):
+            if self.until_fails:
+                raise dj.DockerError("no until filter support")
+            if self.until_output is not None:
+                return self.until_output
+            cutoff = NOW - timedelta(days=30)
+            images = dj.parse_images(fixture("images.jsonl"))
+            old_ids = [img.id for img in images if img.created < cutoff]
+            return "\n".join(old_ids)
         if command == "ps -aq":
             return "\n".join("container%d" % i for i in range(12))
         if command.startswith("container inspect"):
@@ -79,6 +90,19 @@ class CollectPreviewTests(unittest.TestCase):
         preview = dj.collect_preview(self.config, FakeDocker(buildx_fails=True), now=NOW)
         self.assertTrue(preview.estimated)
         self.assertEqual(preview.cache_bytes, 20830000000)
+
+    def test_until_filter_failure_falls_back_to_creation_date(self):
+        docker = FakeDocker(until_fails=True)
+        preview = dj.collect_preview(self.config, docker, now=NOW)
+        self.assertEqual(preview.image_bytes, 3558350010)
+        self.assertEqual(preview.image_count, 19)
+
+    def test_until_filter_restricts_images_with_recent_activity(self):
+        # When until returns empty (e.g. all images pulled/tagged recently)
+        docker = FakeDocker(until_output="")
+        preview = dj.collect_preview(self.config, docker, now=NOW)
+        self.assertEqual(preview.image_bytes, 0)
+        self.assertEqual(preview.image_count, 0)
 
 
 class RunDockerTests(unittest.TestCase):

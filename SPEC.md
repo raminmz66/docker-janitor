@@ -35,3 +35,11 @@ Full design document: [`docs/superpowers/specs/2026-10-25-automated-installer-de
 - **`install.sh`**: Portable Bash installer with distro detection (`apt`, `dnf`, `pacman`), automatic dependency checks (`python3-gi`, GTK 3, Ayatana AppIndicator), CLI flag inspection (`--dry-run`, `--no-autostart`, `--prefix`, `--help`), user binary installation (`~/.local/bin/docker-janitor`), scalable SVG icons, and desktop + autostart integration.
 - **`uninstall.sh`**: Clean remover for binaries, icons, and desktop launchers with `--dry-run` and optional `--purge` for user config and logs.
 - **`README.md`**: Prominent "Quick Installation" instructions right near the top.
+
+## Image Activity & Prune Filter Alignment Spec
+Full design document: [`docs/superpowers/specs/2026-10-28-align-image-preview-activity-design.md`](docs/superpowers/specs/2026-10-28-align-image-preview-activity-design.md)
+
+### 1. Consistent Age Evaluation
+- Inspect eligible image IDs directly matching Docker's `--filter until=<hours>` prune filter.
+- Prevent phantom previews where an image's upstream build date is older than retention threshold but its local tag/pull activity is recent.
+- Fall back gracefully to creation date when `until` query is unsupported or offline.
